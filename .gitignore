@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.streamlit/
+data/*.hdf5
+data/raw/
+data/*.log
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+*.h5
+*.hdf5

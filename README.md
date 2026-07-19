@@ -1,6 +1,14 @@
-# The Well · active_matter Statistical Lab
+# The Well · Statistical Laboratory
 
-Statistical analysis and an interactive ANOVA dashboard for physics simulations from **[The Well](https://github.com/PolymathicAI/the_well)** (`active_matter` dataset).
+Statistical analysis and an interactive ANOVA dashboard for physics simulations from **[The Well](https://github.com/PolymathicAI/the_well)**.
+
+Supported ensembles (sidebar picker):
+
+| Lab id | Hugging Face dataset | Factors |
+|--------|----------------------|---------|
+| `active_matter` | `polymathic-ai/active_matter` | `alpha` × `zeta` |
+| `gray_scott` | `polymathic-ai/gray_scott_reaction_diffusion` | `f` × `k` (6 named regimes) |
+| `acoustic_scattering` | `polymathic-ai/acoustic_scattering_maze` | `maze_width` × `n_sources` |
 
 **Live demo:** [https://physcientific.onrender.com/](https://physcientific.onrender.com/)  
 *(Render free tier may cold-start for ~30–60s after idle.)*
@@ -9,17 +17,23 @@ Repository: [Emilio-Gordillo-Esparragoza/phyScientific](https://github.com/Emili
 
 ## What this project does
 
-1. **Extracts** scalar physics features from each trajectory (nematic order, kinetic energy, enstrophy, divergence residual, spectral slope, …) plus control factors `alpha` (dipole) and `zeta` (alignment).
+1. **Extracts** scalar physics features from each trajectory plus dataset-specific control factors.
 2. **Quantifies** how much initial circumstances matter with **one- / two-way ANOVA**, effect sizes (η², ω²), Tukey HSD, and pairwise t-tests.
-3. **Validates** approximate physics laws (concentration ≈ 1, ∇·u ≈ 0, isotropic→nematic transition vs `zeta`).
-4. **Flags anomalies** within each `(alpha, zeta)` cell.
-5. Ships an **interactive Streamlit app** with a teaching ANOVA sandbox (sliders for mean difference / within-group dispersion → live F, p, SSE, η² + evidence verdict).
+3. **Validates** approximate physics / sanity checks (catalog-driven per dataset).
+4. **Flags anomalies** within each circumstance cell.
+5. Ships an **interactive Streamlit app** with a hamburger sidebar to switch datasets, plus a teaching ANOVA sandbox.
 
-## Findings
+## UI: dataset sidebar
 
-Results below are from the committed real feature table [`data/features.parquet`](data/features.parquet): **134** trajectories, **45/45** α×ζ factorial cells, `synthetic = 0`. Features were computed while streaming The Well train split from Hugging Face with `--time-stride 8 --space-stride 16` (analysis-ready table, not full-resolution fields).
+The lab board keeps the same palette and chart-paper grid. Use the **three-line control (top-left)** to open the sidebar and select `active_matter`, `gray_scott`, or `acoustic_scattering`. Branding, factors, response lists, and physics cards update from [`src/dataset_catalog.py`](src/dataset_catalog.py).
 
-### Experimental design
+## Findings (active_matter)
+
+Results below are from the committed real feature table [`data/features.parquet`](data/features.parquet) (also mirrored as [`data/features_active_matter.parquet`](data/features_active_matter.parquet)): **134** trajectories, **45/45** α×ζ factorial cells, `synthetic = 0`. Features were computed while streaming The Well train split from Hugging Face with `--time-stride 8 --space-stride 16` (analysis-ready table, not full-resolution fields).
+
+`gray_scott` and `acoustic_scattering` ship with **synthetic** demo tables so the sidebar works offline; replace them with real extracts when ready (see Data below).
+
+### Experimental design (active_matter)
 
 - **System:** continuum theory of rod-like active particles in a Stokes fluid (`active_matter`).
 - **Factors (initial / control circumstances):** dipole strength `alpha ∈ {-1, -2, -3, -4, -5}` and alignment `zeta ∈ {1, 3, …, 17}` (`beta` fixed at 0.8 in the source ensemble).
@@ -61,10 +75,15 @@ All headline numbers refer to the stride-reduced feature table used for statisti
 
 ```
 phyScientific/
-├── app/streamlit_app.py      # Dashboard (3 tabs)
-├── data/features.parquet     # Real analysis-ready feature table
+├── app/streamlit_app.py      # Dashboard (sidebar + 3 panels)
+├── data/
+│   ├── features.parquet                 # active_matter (legacy path)
+│   ├── features_active_matter.parquet   # canonical active_matter
+│   ├── features_gray_scott.parquet
+│   └── features_acoustic_scattering.parquet
 ├── notebooks/analysis.ipynb  # Narrative statistical analysis
 ├── src/
+│   ├── dataset_catalog.py    # Dataset registry (factors, checks, copy)
 │   ├── extract_features.py   # HF stream / synthetic feature builder
 │   └── stats.py              # Shared ANOVA / t-test / anomaly helpers
 ├── requirements.txt          # Full local stack (extraction + app)
@@ -95,29 +114,44 @@ streamlit run app/streamlit_app.py
 
 ### Preferred: real features from Hugging Face
 
-`data/features.parquet` should contain **real** The Well `active_matter` trajectories whenever possible. The train split is a complete **5 α × 9 ζ** factorial (**45** HDF5 files). Most cells have **3** trajectories; a few files in the HF release contain 1–2 or 4 trajectories, so a full extract is typically ~130–140 rows rather than a rigid 135.
+`data/features_active_matter.parquet` (and legacy `data/features.parquet`) should contain **real** The Well `active_matter` trajectories whenever possible. The train split is a complete **5 α × 9 ζ** factorial (**45** HDF5 files). Most cells have **3** trajectories; a few files in the HF release contain 1–2 or 4 trajectories, so a full extract is typically ~130–140 rows rather than a rigid 135.
 
-Each remote file is ~740 MB. Streaming with space/time strides is the efficient path (no full local mirror required):
+Each remote file is large. Streaming with space/time strides is the efficient path (no full local mirror required):
 
 ```powershell
-# Full factorial (recommended). Checkpoints after every file; safe to re-run with --resume.
-python -u -m src.extract_features --splits train --time-stride 8 --space-stride 16 --max-traj-per-file 3 --workers 4 --out data/features.parquet
+# active_matter — full factorial (recommended)
+python -u -m src.extract_features --dataset active_matter --splits train --time-stride 8 --space-stride 16 --max-traj-per-file 3 --workers 4
+
+# gray_scott — six (f, k) regimes (sparse design; not a full f×k grid)
+python -u -m src.extract_features --dataset gray_scott --splits train --time-stride 16 --space-stride 4 --max-traj-per-file 8 --workers 4
+
+# acoustic_scattering_maze — width × n_sources (factors derived from fields/attrs)
+python -u -m src.extract_features --dataset acoustic_scattering --splits train --time-stride 4 --space-stride 8 --max-traj-per-file 3 --workers 4
 
 # Resume after a network interruption
-python -u -m src.extract_features --splits train --time-stride 8 --space-stride 16 --max-traj-per-file 3 --workers 4 --out data/features.parquet --resume
+python -u -m src.extract_features --dataset active_matter --splits train --time-stride 8 --space-stride 16 --max-traj-per-file 3 --workers 4 --resume
 ```
 
-**Efficiency plan used by this project**
+Default output paths come from the catalog (`data/features_<id>.parquet`).
+
+**Efficiency plan used by this project (active_matter)**
 
 1. Stream all **45** train cells via `fsspec` + `h5py` (avoids the Windows `WellDataset` path bug).
 2. Aggressive but documented strides: `--time-stride 8 --space-stride 16`, capped at 3 traj/file.
 3. Concurrent streams with `--workers 4`.
-4. Checkpoint every file into `data/features.parquet`.
+4. Checkpoint every file into the output parquet.
 
-### Fallback only: synthetic demo table
+**Design notes for the other ensembles**
+
+- **gray_scott:** only six discrete `(f, k)` pairs (Gliders, Bubbles, Maze, Worms, Spirals, Spots). Two-way ANOVA still runs on observed cells; interpret interaction carefully.
+- **acoustic_scattering:** uses `acoustic_scattering_maze`. `maze_width` and `n_sources` are read from scalars when present, otherwise estimated from density / initial pressure.
+
+### Fallback: synthetic demo tables
 
 ```powershell
-python -m src.extract_features --synthetic --out data/features.parquet
+python -m src.extract_features --dataset active_matter --synthetic
+python -m src.extract_features --dataset gray_scott --synthetic
+python -m src.extract_features --dataset acoustic_scattering --synthetic
 ```
 
 ## Run the analysis notebook
@@ -139,9 +173,10 @@ streamlit run app/streamlit_app.py
 | Tab | Content |
 |-----|---------|
 | **ANOVA sandbox** | Sliders for #groups, n, mean difference, within-group SD → live F, p, SSE, η², and an evidence verdict. |
-| **Real-data ANOVA** | One-way / two-way ANOVA and pairwise t-tests on `features.parquet`. |
-| **Physics & anomalies** | Conservation / incompressibility / phase-transition checks + anomaly table. |
+| **Real-data ANOVA** | One-way / two-way ANOVA and pairwise t-tests on the selected dataset’s feature table. |
+| **Physics & anomalies** | Catalog-driven physics checks + within-cell anomaly table. |
 
+Open the **sidebar** (hamburger, top-left) to switch ensembles.
 ## Deploy on Render
 
 The public demo is a **Render** Web Service (Streamlit needs a long-running process; Vercel/Supabase alone are not suitable without a rewrite).
@@ -161,9 +196,11 @@ The public demo is a **Render** Web Service (Streamlit needs a long-running proc
 - **Start command:** `streamlit run app/streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --browser.gatherUsageStats false`  
 - **Health check path:** `/`
 
-`data/features.parquet` is committed so the live app does **not** download The Well at runtime. Free tier instances sleep when idle; the first request after sleep can take about a minute.
+`data/features_*.parquet` files are committed so the live app does **not** download The Well at runtime. Free tier instances sleep when idle; the first request after sleep can take about a minute.
 
 ## Feature dictionary
+
+### active_matter
 
 | Column | Meaning |
 |--------|---------|
@@ -176,6 +213,28 @@ The public demo is a **Render** Web Service (Streamlit needs a long-running proc
 | `time_to_steady` | Fraction of time to order-parameter plateau |
 | `synthetic` | `False` for real Well data; `True` for demo generator |
 
+### gray_scott
+
+| Column | Meaning |
+|--------|---------|
+| `f`, `k`, `pattern` | Feed / kill rates and named regime label |
+| `mean_A`, `mean_B`, `std_A`, `std_B` | Species concentration stats |
+| `pattern_contrast` | `std_A + std_B` (pattern strength proxy) |
+| `spectral_slope`, `time_to_steady` | Structure / equilibration |
+
+### acoustic_scattering
+
+| Column | Meaning |
+|--------|---------|
+| `maze_width`, `n_sources` | Path width (px) and initial source count |
+| `mean_abs_pressure`, `pressure_energy` | Pressure field intensity |
+| `kinetic_energy`, `wall_fraction` | Flow energy / dense-wall occupancy |
+| `spectral_slope`, `time_to_steady` | Structure / equilibration |
+
 ## Citation
 
-If you use The Well / `active_matter` data, please cite the Well paper and the active-matter source paper (see [dataset card](https://huggingface.co/datasets/polymathic-ai/active_matter)).
+If you use The Well data, please cite the Well paper and the relevant dataset cards:
+
+- [active_matter](https://huggingface.co/datasets/polymathic-ai/active_matter)
+- [gray_scott_reaction_diffusion](https://huggingface.co/datasets/polymathic-ai/gray_scott_reaction_diffusion)
+- [acoustic_scattering_maze](https://huggingface.co/datasets/polymathic-ai/acoustic_scattering_maze)

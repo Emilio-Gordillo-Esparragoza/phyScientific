@@ -1,7 +1,8 @@
 """
 Streamlit dashboard:
+  Sidebar — dataset picker (active_matter / gray_scott / acoustic_scattering)
   Tab 1 — Interactive ANOVA teaching sandbox
-  Tab 2 — Real-data ANOVA on active_matter features
+  Tab 2 — Real-data ANOVA on selected dataset features
   Tab 3 — Physics validation & anomalies
 
 Visual language: lab notebook / chart paper — ink, graphite, muted olive & ochre.
@@ -21,18 +22,12 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-FEATURES_PATH = ROOT / "data" / "features.parquet"
-RESPONSE_OPTIONS = [
-    "nematic_order_S",
-    "nematic_order_S_final",
-    "kinetic_energy",
-    "enstrophy",
-    "std_concentration",
-    "mean_concentration",
-    "div_u_rms",
-    "spectral_slope",
-    "time_to_steady",
-]
+from src.dataset_catalog import (  # noqa: E402
+    DATASET_IDS,
+    DatasetSpec,
+    feature_path_for,
+    get_dataset,
+)
 
 # Lab-board palette (ink / paper / graphite / olive / ochre)
 PALETTE = {
@@ -353,6 +348,60 @@ div[data-testid="column"] .stSlider {{
     color: var(--ink) !important;
 }}
 
+/* Hamburger (collapsed sidebar control) — three-line drawer */
+[data-testid="collapsedControl"] {{
+    background: var(--paper-deep) !important;
+    border: 1.5px solid var(--ink) !important;
+    border-radius: 2px !important;
+    color: var(--ink) !important;
+    top: 0.65rem !important;
+    left: 0.65rem !important;
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 1px 1px 0 var(--grid);
+    z-index: 1000 !important;
+}}
+[data-testid="collapsedControl"] svg {{
+    fill: var(--ink) !important;
+    stroke: var(--ink) !important;
+}}
+[data-testid="collapsedControl"]:hover {{
+    background: var(--paper) !important;
+    border-color: var(--olive) !important;
+}}
+
+/* Sidebar panel — same lab board language */
+section[data-testid="stSidebar"] {{
+    background:
+        linear-gradient(90deg, transparent 49px, var(--grid) 49px, var(--grid) 50px, transparent 50px),
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper) !important;
+    background-size: 50px 50px, 10px 10px, 10px 10px, auto !important;
+    border-right: 1.5px solid var(--ink) !important;
+}}
+section[data-testid="stSidebar"] > div {{
+    background: transparent !important;
+}}
+.lab-sidebar-kicker {{
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--olive);
+    margin: 0.35rem 0 0.75rem 0;
+}}
+.lab-sidebar-hint {{
+    font-family: "Source Sans 3", "Segoe UI", sans-serif;
+    font-size: 0.85rem;
+    color: var(--graphite);
+    line-height: 1.4;
+    margin: 0.5rem 0 1rem 0;
+}}
+
 /* Mobile */
 @media (max-width: 768px) {{
     h1 {{ font-size: 1.55rem !important; }}
@@ -408,35 +457,42 @@ def apply_plotly_theme(fig: go.Figure, height: int = 400) -> go.Figure:
 
 
 @st.cache_data(show_spinner=False)
-def load_features() -> pd.DataFrame:
-    if not FEATURES_PATH.exists():
-        raise FileNotFoundError(str(FEATURES_PATH))
-    return pd.read_parquet(FEATURES_PATH)
+def load_features(path_str: str) -> pd.DataFrame:
+    path = Path(path_str)
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    return pd.read_parquet(path)
 
 
-def load_features_or_stop() -> pd.DataFrame:
+def load_features_or_stop(spec: DatasetSpec) -> pd.DataFrame:
+    path = feature_path_for(spec.id)
     try:
-        return load_features()
+        return load_features(str(path))
     except FileNotFoundError:
         st.error(
-            f"Missing `{FEATURES_PATH}`. Run:\n\n"
-            "`python -m src.extract_features --splits train`\n\n"
+            f"Missing `{path}`. Run:\n\n"
+            f"`python -m src.extract_features --dataset {spec.id} --splits train`\n\n"
             "or, as a demo fallback only:\n\n"
-            "`python -m src.extract_features --synthetic`"
+            f"`python -m src.extract_features --dataset {spec.id} --synthetic`"
         )
         st.stop()
 
 
-def data_provenance(df: pd.DataFrame) -> dict:
+def data_provenance(df: pd.DataFrame, spec: DatasetSpec) -> dict:
     is_synth = bool(df.get("synthetic", pd.Series([False] * len(df))).fillna(False).any())
-    n_alpha = int(df["alpha"].nunique()) if "alpha" in df.columns else 0
-    n_zeta = int(df["zeta"].nunique()) if "zeta" in df.columns else 0
-    n_cells = int(df.groupby(["alpha", "zeta"]).ngroups) if {"alpha", "zeta"} <= set(df.columns) else 0
+    fa, fb = spec.factor_a, spec.factor_b
+    n_a = int(df[fa].nunique()) if fa in df.columns else 0
+    n_b = int(df[fb].nunique()) if fb in df.columns else 0
+    n_cells = (
+        int(df.groupby([fa, fb]).ngroups)
+        if {fa, fb} <= set(df.columns)
+        else 0
+    )
     return {
         "synthetic": is_synth,
         "n_rows": len(df),
-        "n_alpha": n_alpha,
-        "n_zeta": n_zeta,
+        "n_factor_a": n_a,
+        "n_factor_b": n_b,
         "n_cells": n_cells,
     }
 
@@ -444,21 +500,50 @@ def data_provenance(df: pd.DataFrame) -> dict:
 AUTHOR = "Emilio Gordillo Esparragoza"
 
 
-def lab_header(df: pd.DataFrame) -> None:
-    meta = data_provenance(df)
+def render_dataset_sidebar() -> DatasetSpec:
+    """Collapsed sidebar drawer: pick which Well feature table to analyze."""
+    if "dataset_id" not in st.session_state:
+        st.session_state["dataset_id"] = "active_matter"
+
+    with st.sidebar:
+        st.markdown('<p class="lab-sidebar-kicker">Dataset</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="lab-sidebar-hint">Choose a The Well ensemble. '
+            "ANOVA sandbox stays the same; real-data panels reload features.</p>",
+            unsafe_allow_html=True,
+        )
+        labels = {
+            "active_matter": "active_matter",
+            "gray_scott": "gray_scott",
+            "acoustic_scattering": "acoustic_scattering",
+        }
+        choice = st.radio(
+            "Ensemble",
+            list(DATASET_IDS),
+            format_func=lambda i: labels.get(i, i),
+            key="dataset_id",
+            label_visibility="collapsed",
+        )
+        spec = get_dataset(choice)
+        st.caption(f"HF · `{spec.hf_name}`")
+        st.markdown(f"[Dataset card]({spec.hf_url})")
+        st.markdown(
+            f"<p class='lab-sidebar-hint'>Factors: "
+            f"<code>{spec.factor_a}</code> × <code>{spec.factor_b}</code></p>",
+            unsafe_allow_html=True,
+        )
+    return get_dataset(st.session_state["dataset_id"])
+
+
+def lab_header(df: pd.DataFrame, spec: DatasetSpec) -> None:
+    meta = data_provenance(df, spec)
     findings_html = ""
-    if not meta["synthetic"]:
+    if not meta["synthetic"] and spec.findings_real:
         findings_html = f"""
         <div class="lab-findings">
           <div class="lab-findings-label">Results at a glance</div>
           <p>
-            On <b>{meta["n_rows"]}</b> real trajectories covering all
-            <b>{meta["n_cells"]}</b> α×ζ cells, two-way ANOVA shows
-            <b>alignment (ζ)</b> dominates nematic order
-            (partial η² ≈ 0.97), while <b>dipole (α)</b> has little main effect
-            and acts mainly through an α×ζ interaction. Concentration stays at 1;
-            order rises with ζ (Spearman ρ ≈ 0.86). See the README Findings section
-            for full numbers and caveats.
+            {spec.findings_real.format(**meta)}
           </p>
         </div>
         """
@@ -467,28 +552,20 @@ def lab_header(df: pd.DataFrame) -> None:
         <div class="lab-kicker">
           Statistical laboratory
         </div>
-        <h1 class="lab-brand">active_matter · circumstance &amp; response</h1>
+        <h1 class="lab-brand">{spec.title}</h1>
         <p class="lab-lede">
-          Quantify how initial control factors (α, ζ) shape nematic order and flow,
-          with ANOVA evidence, physics-law checks, and within-cell anomaly flags.
+          {spec.lede}
         </p>
         <div class="lab-meta">
           <span>trajectories <b>{meta["n_rows"]}</b></span>
-          <span>α levels <b>{meta["n_alpha"]}</b></span>
-          <span>ζ levels <b>{meta["n_zeta"]}</b></span>
+          <span>{spec.factor_a_label} levels <b>{meta["n_factor_a"]}</b></span>
+          <span>{spec.factor_b_label} levels <b>{meta["n_factor_b"]}</b></span>
           <span>factorial cells <b>{meta["n_cells"]}</b></span>
         </div>
         <div class="lab-dataset">
-          <div class="lab-dataset-label">What is the active_matter dataset?</div>
+          <div class="lab-dataset-label">What is the {spec.id} dataset?</div>
           <p>
-            <code>active_matter</code> (from PolymathicAI <b>The Well</b>) is a continuum
-            simulation ensemble of <b>rod-like active particles</b> in a <b>Stokes fluid</b>.
-            Each run is controlled by two initial factors: dipole strength
-            <code>α</code> (alpha) and alignment strength <code>ζ</code> (zeta).
-            From each trajectory we extract scalar responses — nematic order
-            <code>S</code>, kinetic energy, enstrophy, concentration, divergence residual —
-            then ask how α and ζ shape those outcomes via ANOVA, physics checks, and
-            within-cell anomaly screens.
+            {spec.blurb}
           </p>
         </div>
         {findings_html}
@@ -496,12 +573,12 @@ def lab_header(df: pd.DataFrame) -> None:
     )
 
 
-def lab_footer() -> None:
+def lab_footer(spec: DatasetSpec) -> None:
     st.html(
         f"""
         <div class="lab-footer">
           Author · <b>{AUTHOR}</b><br/>
-          Dataset · PolymathicAI · The Well · active_matter
+          Dataset · {spec.footer_label}
         </div>
         """
     )
@@ -760,11 +837,10 @@ def tab_teaching() -> None:
 
     glossary_block()
 
-
 # ---------------------------------------------------------------------------
 # Tab 2 — real-data ANOVA
 # ---------------------------------------------------------------------------
-def tab_realdata(df: pd.DataFrame) -> None:
+def tab_realdata(df: pd.DataFrame, spec: DatasetSpec) -> None:
     from src.stats import (
         assumption_checks,
         one_way_anova,
@@ -772,29 +848,51 @@ def tab_realdata(df: pd.DataFrame) -> None:
         two_way_anova,
     )
 
-    st.markdown("### ANOVA on active_matter features")
+    fa, fb = spec.factor_a, spec.factor_b
+    responses = [c for c in spec.response_options if c in df.columns]
+    if not responses:
+        st.error(f"No response columns found for {spec.id}.")
+        return
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
+
+    st.markdown(f"### ANOVA on `{spec.id}` features")
     st.markdown(
-        "Apply the same ANOVA ideas to **real** The Well trajectories. "
-        "Pick a response feature and a factor (`zeta` or `alpha`), or run the full "
+        f"Apply the same ANOVA ideas to **{spec.id}** trajectories. "
+        f"Pick a response feature and a factor (`{fa}` or `{fb}`), or run the full "
         "two-way model with interaction."
     )
     if df.get("synthetic", pd.Series([False])).fillna(False).any():
         st.info(
-            "Currently using a **synthetic / demo** feature table that mirrors the "
-            "active_matter factorial design (α × ζ). Replace it with real data:\n\n"
-            "`python -m src.extract_features --splits train --time-stride 8 --space-stride 16`"
+            f"Currently using a **synthetic / demo** feature table for `{spec.id}`. "
+            "Replace it with real data:\n\n"
+            f"`python -m src.extract_features --dataset {spec.id} --splits train "
+            "--time-stride 8 --space-stride 16`"
         )
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        response = st.selectbox("Response feature", RESPONSE_OPTIONS, index=0)
+        response = st.selectbox("Response feature", responses, index=default_idx)
     with c2:
         analysis = st.selectbox(
             "Analysis",
-            ["One-way ANOVA", "Two-way ANOVA (alpha × zeta)", "Pairwise t-tests"],
+            [
+                "One-way ANOVA",
+                f"Two-way ANOVA ({fa} × {fb})",
+                "Pairwise t-tests",
+            ],
         )
     with c3:
-        factor = st.selectbox("Factor (one-way / t-tests)", ["zeta", "alpha"], index=0)
+        factor = st.selectbox(
+            "Factor (one-way / t-tests)",
+            [fa, fb],
+            index=0,
+        )
+
+    two_way_label = f"Two-way ANOVA ({fa} × {fb})"
 
     if analysis == "One-way ANOVA":
         res = one_way_anova(df, response, factor)
@@ -855,27 +953,27 @@ def tab_realdata(df: pd.DataFrame) -> None:
             "**reject = True** means that pair’s means differ after multiple-comparison control."
         )
 
-    elif analysis == "Two-way ANOVA (alpha × zeta)":
-        res = two_way_anova(df, response, "alpha", "zeta")
+    elif analysis == two_way_label:
+        res = two_way_anova(df, response, fa, fb)
         verdict_banner(res["verdict"], res["verdict_level"])
         st.dataframe(res["table"], use_container_width=True)
         fig_note(
-            "Two-way ANOVA table: main effects of **α** and **ζ**, plus their **interaction**. "
+            f"Two-way ANOVA table: main effects of **{fa}** and **{fb}**, plus their **interaction**. "
             "Partial η² shows which term explains the most unique variance in the response."
         )
         fig = px.box(
             df,
-            x=df["zeta"].astype(str),
+            x=df[fb].astype(str),
             y=response,
-            color=df["alpha"].astype(str),
-            title=f"{response} — zeta × alpha",
-            labels={"x": "zeta", "color": "alpha"},
+            color=df[fa].astype(str),
+            title=f"{response} — {fb} × {fa}",
+            labels={"x": fb, "color": fa},
             color_discrete_sequence=PLOTLY_COLORS,
         )
         st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
         fig_note(
-            f"**{response}** vs **ζ**, colored by **α**. "
-            "If curves/boxes for different α diverge as ζ changes, that visualizes an interaction."
+            f"**{response}** vs **{fb}**, colored by **{fa}**. "
+            f"If boxes for different {fa} diverge as {fb} changes, that visualizes an interaction."
         )
         with st.expander("Model summary"):
             st.text(res["model_summary"])
@@ -910,20 +1008,27 @@ def tab_realdata(df: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 # Tab 3 — physics + anomalies
 # ---------------------------------------------------------------------------
-def tab_physics(df: pd.DataFrame) -> None:
+def tab_physics(df: pd.DataFrame, spec: DatasetSpec) -> None:
     from src.stats import detect_anomalies, physics_validation
+
+    fa, fb = spec.factor_a, spec.factor_b
+    responses = [c for c in spec.response_options if c in df.columns]
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
 
     st.markdown("### Physics validation & anomalies")
     st.markdown(
-        "Sanity-check the feature table against expected physics "
-        "(concentration near 1, order rising with alignment), "
-        "then flag trajectories that look atypical inside their (α, ζ) cell."
+        f"Sanity-check the `{spec.id}` feature table against expected physics, "
+        f"then flag trajectories that look atypical inside their ({fa}, {fb}) cell."
     )
 
-    phys = physics_validation(df)
-    for key in ("concentration", "incompressibility", "phase_transition"):
-        block = phys[key]
+    phys = physics_validation(df, checks=spec.physics_checks)
+    for key, block in phys.items():
         color = PALETTE["pass"] if block["pass"] else PALETTE["fail"]
+        title = block.get("title", key.replace("_", " ").title())
         st.markdown(
             f"""
             <div style="padding:0.7rem 1rem;margin-bottom:0.55rem;
@@ -936,7 +1041,7 @@ def tab_physics(df: pd.DataFrame) -> None:
                 </span>
                 <div style="font-family:'Source Serif 4',Georgia,serif;font-weight:600;
                             color:{PALETTE["ink"]};margin-top:0.15rem;">
-                    {key.replace("_", " ").title()}
+                    {title}
                 </div>
                 <div style="color:{PALETTE["graphite"]};font-size:0.95rem;margin-top:0.2rem;">
                     {block["message"]}
@@ -946,136 +1051,148 @@ def tab_physics(df: pd.DataFrame) -> None:
             unsafe_allow_html=True,
         )
     fig_note(
-        "Pass/fail cards summarize conservation, discrete divergence, and the "
-        "Spearman correlation between nematic order and ζ."
+        "Pass/fail cards summarize dataset-specific conservation, bounds, and association checks."
     )
 
-    st.markdown("#### Phase transition: nematic order vs alignment (ζ)")
-    fig = px.scatter(
-        df,
-        x="zeta",
-        y="nematic_order_S",
-        color=df["alpha"].astype(str),
-        labels={"color": "alpha"},
-        title="Nematic order S vs zeta (colored by alpha)",
-        opacity=0.7,
-        color_discrete_sequence=PLOTLY_COLORS,
-    )
-    means = (
-        df.groupby(["alpha", "zeta"], as_index=False)["nematic_order_S"]
-        .mean()
-        .sort_values(["alpha", "zeta"])
-    )
-    for a, sub in means.groupby("alpha"):
-        fig.add_trace(
-            go.Scatter(
-                x=sub["zeta"],
-                y=sub["nematic_order_S"],
-                mode="lines",
-                name=f"mean α={a}",
-                line=dict(width=2),
-            )
+    sx, sy, sc = spec.scatter_x, spec.scatter_y, spec.scatter_color
+    if sx in df.columns and sy in df.columns and sc in df.columns:
+        st.markdown(f"#### Response vs circumstance: {sy} vs {sx}")
+        fig = px.scatter(
+            df,
+            x=sx,
+            y=sy,
+            color=df[sc].astype(str),
+            labels={"color": sc},
+            title=spec.scatter_title or f"{sy} vs {sx}",
+            opacity=0.7,
+            color_discrete_sequence=PLOTLY_COLORS,
         )
-    st.plotly_chart(apply_plotly_theme(fig, height=440), use_container_width=True)
-    fig_note(
-        "Each point is a trajectory. Lines are mean **S** vs **ζ** at fixed **α**. "
-        "A rising trend is the isotropic→nematic-like signature in this ensemble."
-    )
+        means = (
+            df.groupby([sc, sx], as_index=False)[sy]
+            .mean()
+            .sort_values([sc, sx])
+        )
+        for a, sub in means.groupby(sc):
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[sx],
+                    y=sub[sy],
+                    mode="lines",
+                    name=f"mean {sc}={a}",
+                    line=dict(width=2),
+                )
+            )
+        st.plotly_chart(apply_plotly_theme(fig, height=440), use_container_width=True)
+        fig_note(
+            f"Each point is one trajectory. Lines are cell means of **{sy}** vs **{sx}**, "
+            f"split by **{sc}**."
+        )
 
+    st.markdown("#### Within-cell anomalies")
     c1, c2, c3 = st.columns(3)
     with c1:
-        anom_feat = st.selectbox("Anomaly feature", RESPONSE_OPTIONS, index=0, key="anom_feat")
+        anom_feat = st.selectbox(
+            "Anomaly feature",
+            responses or [sy],
+            index=default_idx if responses else 0,
+            key="anom_feat",
+        )
     with c2:
         method = st.selectbox("Method", ["mad", "zscore", "iqr"], index=0)
     with c3:
-        thresh = st.slider("Threshold", 2.0, 6.0, 3.5, 0.1)
+        threshold = st.number_input("Threshold", value=3.5, min_value=1.0, step=0.5)
 
     flagged = detect_anomalies(
-        df, anom_feat, group_cols=["alpha", "zeta"], method=method, threshold=thresh
+        df, anom_feat, group_cols=[fa, fb], method=method, threshold=float(threshold)
     )
     n_flag = int(flagged["is_anomaly"].sum())
-    st.metric("Flagged anomalies", f"{n_flag} / {len(flagged)}")
+    st.metric("Flagged trajectories", f"{n_flag} / {len(flagged)}")
     fig_note(
-        "Anomalies are scored **within** each (α, ζ) cell, so a high-ζ ordered run is not "
-        "flagged merely for having large S overall."
+        f"Anomalies are scored **within each ({fa}, {fb}) cell**, so unusual runs are "
+        "relative to peers with the same circumstance factors — not global outliers."
     )
 
-    fig_a = px.scatter(
-        flagged,
-        x="zeta",
+    plot_df = flagged.copy()
+    plot_df["status"] = np.where(plot_df["is_anomaly"], "anomaly", "ok")
+    fig = px.scatter(
+        plot_df,
+        x=df[fb].astype(str) if fb in df.columns else list(range(len(df))),
         y=anom_feat,
-        color=flagged["is_anomaly"].map({True: "anomaly", False: "ok"}),
-        symbol=df["alpha"].astype(str),
-        title=f"Anomalies in {anom_feat} within (alpha, zeta) cells",
+        color="status",
         color_discrete_map={"anomaly": PALETTE["fail"], "ok": PALETTE["olive"]},
+        title=f"Anomalies in {anom_feat}",
+        opacity=0.75,
     )
-    st.plotly_chart(apply_plotly_theme(fig_a, height=420), use_container_width=True)
-    fig_note(
-        "Red points exceed the robust threshold for the chosen method (MAD / z-score / IQR)."
-    )
+    st.plotly_chart(apply_plotly_theme(fig, height=400), use_container_width=True)
 
-    st.markdown("#### Anomaly table")
     show_cols = [
-        "file",
-        "traj_idx",
-        "alpha",
-        "zeta",
-        anom_feat,
-        "anomaly_score",
+        c
+        for c in [
+            fa,
+            fb,
+            anom_feat,
+            "anomaly_score",
+            "is_anomaly",
+            "file",
+            "traj_idx",
+            "synthetic",
+        ]
+        if c in flagged.columns
     ]
-    if "synthetic" in flagged.columns:
-        show_cols.append("synthetic")
-    if "injected_anomaly" in flagged.columns:
-        show_cols.append("injected_anomaly")
-    show = flagged.loc[flagged["is_anomaly"], show_cols]
-    st.dataframe(show, use_container_width=True)
-    fig_note(
-        "Tabular list of flagged trajectories with their anomaly score for auditing or exclusion."
+    st.dataframe(
+        flagged.loc[flagged["is_anomaly"], show_cols],
+        use_container_width=True,
     )
+    fig_note("Table lists only flagged rows. Empty table ⇒ no within-cell anomalies at this threshold.")
 
     g1, g2 = st.columns(2)
     with g1:
-        st.markdown("#### Concentration conservation")
-        fig_c = px.histogram(
-            df,
-            x="mean_concentration",
-            nbins=30,
-            title="mean concentration",
-            color_discrete_sequence=[PALETTE["olive"]],
-        )
-        fig_c.add_vline(x=1.0, line_dash="dash", line_color=PALETTE["fail"])
-        st.plotly_chart(apply_plotly_theme(fig_c, height=360), use_container_width=True)
-        fig_note(
-            "Histogram of mean concentration. The dashed line marks the physical target **c = 1**."
-        )
+        hist_col = None
+        for cand in ("mean_concentration", "mean_A", "wall_fraction", "mean_abs_pressure"):
+            if cand in df.columns:
+                hist_col = cand
+                break
+        if hist_col:
+            fig_c = px.histogram(
+                df,
+                x=hist_col,
+                nbins=30,
+                title=hist_col,
+                color_discrete_sequence=[PALETTE["olive"]],
+            )
+            if hist_col == "mean_concentration":
+                fig_c.add_vline(x=1.0, line_dash="dash", line_color=PALETTE["fail"])
+            st.plotly_chart(apply_plotly_theme(fig_c, height=320), use_container_width=True)
     with g2:
-        st.markdown("#### Incompressibility residual")
-        fig_d = px.histogram(
-            df,
-            x="div_u_rms",
-            nbins=30,
-            title="div_u_rms",
-            color_discrete_sequence=[PALETTE["ochre"]],
-        )
-        st.plotly_chart(apply_plotly_theme(fig_d, height=360), use_container_width=True)
-        fig_note(
-            "Distribution of discrete divergence RMS. Values can look large on a coarse "
-            "analysis grid even when the underlying Stokes flow is nearly incompressible."
-        )
+        hist2 = None
+        for cand in ("div_u_rms", "pattern_contrast", "pressure_energy", "kinetic_energy"):
+            if cand in df.columns:
+                hist2 = cand
+                break
+        if hist2:
+            fig_d = px.histogram(
+                df,
+                x=hist2,
+                nbins=30,
+                title=hist2,
+                color_discrete_sequence=[PALETTE["ochre"]],
+            )
+            st.plotly_chart(apply_plotly_theme(fig_d, height=320), use_container_width=True)
 
     glossary_block()
 
 
 def main() -> None:
     st.set_page_config(
-        page_title="active_matter · statistical laboratory",
+        page_title="statistical laboratory · The Well",
         page_icon="∫",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
     inject_lab_css()
-    df = load_features_or_stop()
-    lab_header(df)
+    spec = render_dataset_sidebar()
+    df = load_features_or_stop(spec)
+    lab_header(df, spec)
 
     # Only render the selected panel (st.tabs runs every tab body every rerun).
     panel = st.radio(
@@ -1088,11 +1205,11 @@ def main() -> None:
     if panel == "ANOVA sandbox":
         tab_teaching()
     elif panel == "Real-data ANOVA":
-        tab_realdata(df)
+        tab_realdata(df, spec)
     else:
-        tab_physics(df)
+        tab_physics(df, spec)
 
-    lab_footer()
+    lab_footer(spec)
 
 
 if __name__ == "__main__":

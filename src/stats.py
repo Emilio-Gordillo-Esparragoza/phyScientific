@@ -7,7 +7,7 @@ Used by notebooks/analysis.ipynb and app/streamlit_app.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -354,62 +354,129 @@ def detect_anomalies(
     return out
 
 
-def physics_validation(df: pd.DataFrame) -> dict:
-    """
-    Check approximate physics laws on the feature table.
+def _run_physics_check(df: pd.DataFrame, spec: Any) -> dict:
+    """Evaluate one PhysicsCheckSpec (from dataset_catalog) against a feature table."""
+    kind = getattr(spec, "kind", None)
+    key = getattr(spec, "key", "check")
+    title = getattr(spec, "title", key)
 
-    - concentration conservation: mean_concentration ≈ 1
-    - near-incompressibility: div_u_rms small
-    - phase transition: nematic order rises with zeta (Spearman)
-    """
-    mean_c = float(df["mean_concentration"].mean())
-    std_c = float(df["mean_concentration"].std())
-    cons_ok = abs(mean_c - 1.0) < 0.05
+    if kind == "mean_near_target":
+        col = spec.column
+        mean_v = float(df[col].mean())
+        std_v = float(df[col].std())
+        target = float(spec.target)
+        tol = float(spec.tol)
+        ok = abs(mean_v - target) < tol
+        msg = (
+            f"Mean {col} = {mean_v:.4f} (target {target}, tol {tol}) — "
+            + ("PASS" if ok else "FAIL")
+        )
+        return {
+            "key": key,
+            "title": title,
+            "pass": ok,
+            "message": msg,
+            "mean": mean_v,
+            "std": std_v,
+            "target": target,
+        }
 
-    div_mean = float(df["div_u_rms"].mean())
-    # Downsampled grids inflate discrete divergence; also compare to flow scale.
-    ke_mean = float(df["kinetic_energy"].mean()) if "kinetic_energy" in df else 0.0
-    # Relative residual: div / (1 + |u| scale). Pass if absolute or relative is small,
-    # or if values are stably finite (report-only soft check for coarse grids).
-    vel_scale = float(np.sqrt(max(2.0 * ke_mean, 1e-12)))
-    div_rel = div_mean / vel_scale
-    div_ok = bool(div_mean < 0.5 or div_rel < 2.0)
+    if kind == "range":
+        col = spec.column
+        mean_v = float(df[col].mean())
+        lo = float(spec.lo) if spec.lo is not None else -np.inf
+        hi = float(spec.hi) if spec.hi is not None else np.inf
+        ok = bool(lo <= mean_v <= hi)
+        # Soft pass for div_u_rms-style checks: also accept relative residual
+        if col == "div_u_rms" and "kinetic_energy" in df.columns and not ok:
+            ke_mean = float(df["kinetic_energy"].mean())
+            vel_scale = float(np.sqrt(max(2.0 * ke_mean, 1e-12)))
+            div_rel = mean_v / vel_scale
+            ok = bool(div_rel < 2.0)
+            detail = f" (relative to |u| scale: {div_rel:.3f})"
+        else:
+            detail = ""
+        default_pass = getattr(spec, "pass_message", None) or f"Mean {col} in [{lo}, {hi}]"
+        default_fail = getattr(spec, "fail_message", None) or f"Mean {col} outside [{lo}, {hi}]"
+        msg = (
+            f"Mean {col} = {mean_v:.4g}{detail} — "
+            + (default_pass if ok else default_fail)
+        )
+        return {
+            "key": key,
+            "title": title,
+            "pass": ok,
+            "message": msg,
+            "mean": mean_v,
+        }
 
-    spearman = stats.spearmanr(df["zeta"], df["nematic_order_S"])
-    phase_ok = bool(spearman.correlation > 0.3 and spearman.pvalue < 0.05)
+    if kind == "spearman":
+        x_col, y_col = spec.x, spec.y
+        spearman = stats.spearmanr(df[x_col], df[y_col])
+        rho = float(spearman.correlation) if spearman.correlation is not None else 0.0
+        p = float(spearman.pvalue) if spearman.pvalue is not None else 1.0
+        min_rho = float(spec.min_rho) if spec.min_rho is not None else 0.0
+        max_p = float(spec.max_p) if spec.max_p is not None else 0.05
+        ok = bool(rho > min_rho and p < max_p)
+        default_pass = getattr(spec, "pass_message", None) or f"{y_col} rises with {x_col}"
+        default_fail = getattr(spec, "fail_message", None) or f"Weak {y_col} vs {x_col}"
+        msg = (
+            f"{y_col} vs {x_col}: Spearman ρ={rho:.3f}, p={p:.3e} — "
+            + (default_pass if ok else default_fail)
+        )
+        return {
+            "key": key,
+            "title": title,
+            "pass": ok,
+            "message": msg,
+            "spearman_rho": rho,
+            "spearman_p": p,
+        }
+
+    if kind == "finite":
+        cols = list(spec.columns) if spec.columns else []
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            return {
+                "key": key,
+                "title": title,
+                "pass": False,
+                "message": f"Missing columns: {missing}",
+            }
+        finite_ok = all(bool(np.isfinite(df[c]).all()) for c in cols)
+        finite_ok = finite_ok and all(bool(np.isfinite(df[c].mean())) for c in cols)
+        msg = (
+            f"Finite values for {', '.join(cols)} — "
+            + ("PASS" if finite_ok else "FAIL")
+        )
+        return {"key": key, "title": title, "pass": finite_ok, "message": msg}
 
     return {
-        "concentration": {
-            "mean": mean_c,
-            "std": std_c,
-            "target": 1.0,
-            "pass": cons_ok,
-            "message": (
-                f"Mean concentration = {mean_c:.4f} (target 1.0) - "
-                + ("PASS" if cons_ok else "FAIL")
-            ),
-        },
-        "incompressibility": {
-            "div_u_rms_mean": div_mean,
-            "div_relative": div_rel,
-            "pass": div_ok,
-            "message": (
-                f"Mean |div u| RMS = {div_mean:.4e} (relative to |u| scale: {div_rel:.3f}) - "
-                + (
-                    "PASS (near-incompressible / acceptable on coarse grid)"
-                    if div_ok
-                    else "CHECK (elevated divergence)"
-                )
-            ),
-        },
-        "phase_transition": {
-            "spearman_rho": float(spearman.correlation),
-            "spearman_p": float(spearman.pvalue),
-            "pass": phase_ok,
-            "message": (
-                f"Nematic order vs zeta: Spearman rho={spearman.correlation:.3f}, "
-                f"p={spearman.pvalue:.3e} - "
-                + ("PASS (order rises with alignment)" if phase_ok else "FAIL")
-            ),
-        },
+        "key": key,
+        "title": title,
+        "pass": False,
+        "message": f"Unknown check kind: {kind!r}",
     }
+
+
+def physics_validation(
+    df: pd.DataFrame,
+    checks: list[Any] | tuple[Any, ...] | None = None,
+) -> dict:
+    """
+    Run physics / sanity checks on a feature table.
+
+    If ``checks`` is None, use the classic active_matter checks (backward compatible).
+    Otherwise ``checks`` is a sequence of PhysicsCheckSpec from dataset_catalog.
+    """
+    if checks is None:
+        # Legacy active_matter defaults (imported lazily to avoid circular imports)
+        from src.dataset_catalog import ACTIVE_MATTER
+
+        checks = ACTIVE_MATTER.physics_checks
+
+    out: dict = {}
+    for spec in checks:
+        block = _run_physics_check(df, spec)
+        out[block["key"]] = block
+    return out

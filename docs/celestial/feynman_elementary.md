@@ -34,6 +34,11 @@ Central force $\Rightarrow$ $\Delta\mathbf{v}$ is always parallel to $-\hat{\mat
 - Acceleration magnitude $\propto 1/r^{2}$.  
 - Equal areas $\Rightarrow$ time to sweep a fixed angle $\propto r^{2}$.  
 
+**Triangles in the lecture video.** Partition the orbit into Sun–planet–planet triangles:
+
+1. **Equal-area triangles** (Kepler II): same area $\Leftrightarrow$ same time. On an eccentric orbit their angular widths $\Delta\theta$ are *unequal* — wider near periapsis, skinnier near apoapsis.  
+2. **Equal-angle wedges** (Feynman’s clock): same $\Delta\theta$. Their areas vary, but under inverse-square + conserved $h$, $|\Delta v|$ is the same — equal chord lengths on the velocity diagram.
+
 Therefore, over equal orbital angles, $|\Delta\mathbf{v}|$ is **constant**. Equal chord lengths at successive equal angles imply that $p$ lies on a **circle**.
 
 Analytically (for orientation; not required in the elementary path), with $h=|\mathbf{r}\times\mathbf{v}|$ and $\mu=GM$,
@@ -45,6 +50,8 @@ p=a(1-e^{2}),
 $$
 
 so the tips lie on a circle of radius $\sqrt{\mu/p}$ centered at $(0,\,e\sqrt{\mu/p})$.
+
+The Streamlit lab and notebook draw both partitions side by side, with tables of area and $|\Delta v|$ per sector (`equal_area_triangles` / `equal_angle_triangles` in `src/orbit_feynman.py`).
 
 ### 4. Eccentric point and $90^{\circ}$ rotation
 

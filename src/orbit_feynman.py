@@ -249,6 +249,164 @@ def sample_orbit(
     }
 
 
+@dataclass(frozen=True)
+class OrbitTriangle:
+    """Sun–planet–planet triangle used for Kepler II / Feynman |Δv| visuals."""
+
+    theta0: float
+    theta1: float
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    # Chord triangle area (drawn polygon); underestimates wide curved sectors
+    area: float
+    # True polar sector area ∫ ½ r² dθ between the edges (Kepler II)
+    sector_area: float
+    # Velocity tips at the two endpoints (hodograph)
+    vx0: float
+    vy0: float
+    vx1: float
+    vy1: float
+    dv_mag: float
+
+
+def _triangle_area(x0: float, y0: float, x1: float, y1: float) -> float:
+    """Area of triangle with vertices (0,0), (x0,y0), (x1,y1)."""
+    return 0.5 * abs(x0 * y1 - y0 * x1)
+
+
+def _polar_sector_area(theta0: float, theta1: float, a: float, e: float, n: int = 64) -> float:
+    """∫_{θ0}^{θ1} ½ r(θ)² dθ with focus at the origin."""
+    th = np.linspace(theta0, theta1, n)
+    r = np.asarray(radius_polar(th, a, e), dtype=float)
+    return float(0.5 * np.trapezoid(r * r, th) if hasattr(np, "trapezoid") else 0.5 * np.trapz(r * r, th))
+
+
+def equal_angle_triangles(
+    a: float = 1.0,
+    e: float = 0.5,
+    mu: float = 1.0,
+    n_sectors: int = 8,
+    theta0: float = 0.0,
+) -> list[OrbitTriangle]:
+    """
+    Wedges of equal true-anomaly step Δθ.
+
+    These triangles do *not* have equal area (near periapsis they are stubbier).
+    Their purpose in Feynman's argument: over equal Δθ, |Δv| is the same under
+    inverse-square + conserved h, so hodograph chords have equal length.
+    """
+    n_sectors = max(3, int(n_sectors))
+    dth = 2.0 * np.pi / n_sectors
+    out: list[OrbitTriangle] = []
+    for i in range(n_sectors):
+        th0 = float(theta0 + i * dth)
+        th1 = float(theta0 + (i + 1) * dth)
+        x0, y0 = positions(np.array([th0]), a, e)
+        x1, y1 = positions(np.array([th1]), a, e)
+        vx0, vy0 = velocities(np.array([th0]), a, e, mu)
+        vx1, vy1 = velocities(np.array([th1]), a, e, mu)
+        x0f, y0f = float(x0[0]), float(y0[0])
+        x1f, y1f = float(x1[0]), float(y1[0])
+        vx0f, vy0f = float(vx0[0]), float(vy0[0])
+        vx1f, vy1f = float(vx1[0]), float(vy1[0])
+        out.append(
+            OrbitTriangle(
+                theta0=th0,
+                theta1=th1,
+                x0=x0f,
+                y0=y0f,
+                x1=x1f,
+                y1=y1f,
+                area=_triangle_area(x0f, y0f, x1f, y1f),
+                sector_area=_polar_sector_area(th0, th1, a, e),
+                vx0=vx0f,
+                vy0=vy0f,
+                vx1=vx1f,
+                vy1=vy1f,
+                dv_mag=float(np.hypot(vx1f - vx0f, vy1f - vy0f)),
+            )
+        )
+    return out
+
+
+def equal_area_triangles(
+    a: float = 1.0,
+    e: float = 0.5,
+    mu: float = 1.0,
+    n_sectors: int = 8,
+    n_sample: int = 4000,
+) -> list[OrbitTriangle]:
+    """
+    Triangles that sweep equal area about the Sun (Kepler's second law).
+
+    Uses the polar areal element dA = ½ r² dθ with the focus at the origin.
+    Equal-area slices take unequal Δθ: larger angular steps near periapsis
+    (where r is small) and smaller steps near apoapsis — the classic
+    “equal areas in equal times” picture from the lecture video.
+    """
+    n_sectors = max(3, int(n_sectors))
+    theta = np.linspace(0.0, 2.0 * np.pi, n_sample, endpoint=True)
+    r = np.asarray(radius_polar(theta, a, e), dtype=float)
+    dth = np.diff(theta)
+    dA = 0.5 * 0.5 * (r[:-1] ** 2 + r[1:] ** 2) * dth  # trapezoid
+    cum = np.concatenate([[0.0], np.cumsum(dA)])
+    total = float(cum[-1])
+    targets = np.linspace(0.0, total, n_sectors + 1)
+    th_edges = np.interp(targets, cum, theta)
+    out: list[OrbitTriangle] = []
+    for i in range(n_sectors):
+        th0 = float(th_edges[i])
+        th1 = float(th_edges[i + 1])
+        x0, y0 = positions(np.array([th0]), a, e)
+        x1, y1 = positions(np.array([th1]), a, e)
+        vx0, vy0 = velocities(np.array([th0]), a, e, mu)
+        vx1, vy1 = velocities(np.array([th1]), a, e, mu)
+        x0f, y0f = float(x0[0]), float(y0[0])
+        x1f, y1f = float(x1[0]), float(y1[0])
+        vx0f, vy0f = float(vx0[0]), float(vy0[0])
+        vx1f, vy1f = float(vx1[0]), float(vy1[0])
+        out.append(
+            OrbitTriangle(
+                theta0=th0,
+                theta1=th1,
+                x0=x0f,
+                y0=y0f,
+                x1=x1f,
+                y1=y1f,
+                area=_triangle_area(x0f, y0f, x1f, y1f),
+                sector_area=float(targets[i + 1] - targets[i]),
+                vx0=vx0f,
+                vy0=vy0f,
+                vx1=vx1f,
+                vy1=vy1f,
+                dv_mag=float(np.hypot(vx1f - vx0f, vy1f - vy0f)),
+            )
+        )
+    return out
+
+
+def triangles_to_frame(tris: list[OrbitTriangle]) -> "pd.DataFrame":
+    """Tabular summary for Streamlit / notebook display."""
+    import pandas as pd
+
+    rows = []
+    for i, t in enumerate(tris):
+        rows.append(
+            {
+                "sector": i + 1,
+                "theta0_deg": np.rad2deg(t.theta0) % 360.0,
+                "theta1_deg": np.rad2deg(t.theta1) % 360.0,
+                "dtheta_deg": np.rad2deg((t.theta1 - t.theta0) % (2 * np.pi)),
+                "sector_area": t.sector_area,
+                "triangle_area": t.area,
+                "dv_mag": t.dv_mag,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def fit_circle_2d(vx: np.ndarray, vy: np.ndarray) -> tuple[float, float, float, float]:
     """
     Algebraic circle fit. Returns (cx, cy, radius, rms_radial_residual).

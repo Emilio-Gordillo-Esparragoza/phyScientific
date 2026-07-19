@@ -457,23 +457,46 @@ section[data-testid="stSidebar"] > div {{
 
 
 def apply_plotly_theme(fig: go.Figure, height: int = 400) -> go.Figure:
+    existing = fig.layout
+    # Preserve caller margins / legend when figures already set them (orbit panels).
+    margin = dict(l=48, r=24, t=56, b=44)
+    if existing.margin is not None:
+        for key in ("l", "r", "t", "b"):
+            val = getattr(existing.margin, key, None)
+            if val is not None:
+                margin[key] = val
+    legend = dict(
+        bgcolor="rgba(230,226,214,0.85)",
+        bordercolor=PALETTE["grid"],
+        borderwidth=1,
+        font=dict(family="IBM Plex Mono, monospace", size=11),
+    )
+    if existing.legend is not None:
+        # Merge: keep explicit position from the figure
+        for key in ("orientation", "y", "x", "yanchor", "xanchor", "bgcolor", "bordercolor", "borderwidth", "font"):
+            val = getattr(existing.legend, key, None)
+            if val is not None:
+                legend[key] = val
+
+    title_cfg = dict(
+        font=dict(family="Source Serif 4, Georgia, serif", size=16, color=PALETTE["ink"]),
+        x=0.0,
+        xanchor="left",
+    )
+    if existing.title is not None:
+        if existing.title.text:
+            title_cfg["text"] = existing.title.text
+        if existing.title.pad is not None:
+            title_cfg["pad"] = existing.title.pad
+
     fig.update_layout(
         height=height,
-        margin=dict(l=48, r=24, t=56, b=44),
+        margin=margin,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(230,226,214,0.55)",
         font=dict(family="Source Sans 3, sans-serif", color=PALETTE["ink"], size=13),
-        title=dict(
-            font=dict(family="Source Serif 4, Georgia, serif", size=16, color=PALETTE["ink"]),
-            x=0.0,
-            xanchor="left",
-        ),
-        legend=dict(
-            bgcolor="rgba(230,226,214,0.85)",
-            bordercolor=PALETTE["grid"],
-            borderwidth=1,
-            font=dict(family="IBM Plex Mono, monospace", size=11),
-        ),
+        title=title_cfg,
+        legend=legend,
         colorway=PLOTLY_COLORS,
     )
     fig.update_xaxes(
@@ -537,6 +560,7 @@ def data_provenance(df: pd.DataFrame, spec: DatasetSpec) -> dict:
 
 
 AUTHOR = "Emilio Gordillo Esparragoza"
+REPO_URL = "https://github.com/Emilio-Gordillo-Esparragoza/phyScientific"
 
 
 def render_dataset_sidebar() -> DatasetSpec:
@@ -667,9 +691,32 @@ def lab_header(df: pd.DataFrame, spec: DatasetSpec) -> None:
 def lab_footer(spec: DatasetSpec) -> None:
     st.html(
         f"""
-        <div class="lab-footer">
-          Author · <b>{AUTHOR}</b><br/>
-          Dataset · {spec.footer_label}
+        <div class="lab-footer" style="display:flex;flex-wrap:wrap;align-items:center;
+             justify-content:space-between;gap:0.75rem;">
+          <div>
+            Author · <b>{AUTHOR}</b><br/>
+            Dataset · {spec.footer_label}
+          </div>
+          <a href="{REPO_URL}" target="_blank" rel="noopener noreferrer"
+             title="View on GitHub"
+             style="display:inline-flex;align-items:center;gap:0.45rem;
+                    color:{PALETTE["ink"]};text-decoration:none;
+                    font-family:'IBM Plex Mono',monospace;font-size:0.78rem;
+                    letter-spacing:0.04em;border:1px solid {PALETTE["ink"]};
+                    padding:0.35rem 0.65rem;background:{PALETTE["paper_deep"]};">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                 viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                       0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                       -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07
+                       -.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+                       -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09
+                       2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82
+                       2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01
+                       2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            GitHub
+          </a>
         </div>
         """
     )
@@ -1534,15 +1581,87 @@ def tab_response_interactions(df: pd.DataFrame, spec: DatasetSpec) -> None:
     st.plotly_chart(apply_plotly_theme(fig_c, height=440), use_container_width=True)
 
 
-def _orbit_position_figure(data: dict, snap, show_construction: bool) -> go.Figure:
+def _orbit_legend_layout() -> dict:
+    """Legend below the plot so it never covers the title."""
+    return dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.22,
+        x=0.0,
+        xanchor="left",
+        bgcolor="rgba(230,226,214,0.92)",
+        bordercolor=PALETTE["grid"],
+        borderwidth=1,
+        font=dict(family="IBM Plex Mono, monospace", size=10),
+    )
+
+
+def _add_filled_triangle(
+    fig: go.Figure,
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    *,
+    color: str,
+    name: str,
+    showlegend: bool,
+    opacity: float = 0.35,
+) -> None:
+    fig.add_trace(
+        go.Scatter(
+            x=[0.0, x0, x1, 0.0],
+            y=[0.0, y0, y1, 0.0],
+            mode="lines",
+            fill="toself",
+            fillcolor=color,
+            opacity=opacity,
+            line=dict(color=PALETTE["ink"], width=1),
+            name=name,
+            showlegend=showlegend,
+            hoverinfo="skip",
+        )
+    )
+
+
+def _orbit_position_figure(
+    data: dict,
+    snap,
+    show_construction: bool,
+    triangles: list | None = None,
+    triangle_label: str = "Kepler sectors",
+) -> go.Figure:
     fig = go.Figure()
+    tri_colors = [
+        "rgba(95,107,69,0.35)",
+        "rgba(154,115,64,0.35)",
+        "rgba(61,90,86,0.35)",
+        "rgba(122,62,50,0.30)",
+        "rgba(138,148,112,0.35)",
+        "rgba(196,160,106,0.35)",
+        "rgba(92,87,78,0.30)",
+        "rgba(74,93,58,0.35)",
+    ]
+    if triangles:
+        for i, t in enumerate(triangles):
+            _add_filled_triangle(
+                fig,
+                t.x0,
+                t.y0,
+                t.x1,
+                t.y1,
+                color=tri_colors[i % len(tri_colors)],
+                name=triangle_label if i == 0 else f"sector {i+1}",
+                showlegend=(i == 0),
+                opacity=0.45,
+            )
     fig.add_trace(
         go.Scatter(
             x=np.append(data["x"], data["x"][0]),
             y=np.append(data["y"], data["y"][0]),
             mode="lines",
             name="orbit",
-            line=dict(color=PALETTE["olive"], width=2),
+            line=dict(color=PALETTE["olive"], width=2.5),
         )
     )
     fig.add_trace(
@@ -1576,7 +1695,6 @@ def _orbit_position_figure(data: dict, snap, show_construction: bool) -> go.Figu
             marker=dict(size=11, color=PALETTE["ink"]),
         )
     )
-    # Position + velocity arrow
     fig.add_trace(
         go.Scatter(
             x=[0.0, snap.rx],
@@ -1615,28 +1733,33 @@ def _orbit_position_figure(data: dict, snap, show_construction: bool) -> go.Figu
             )
         )
     fig.update_layout(
-        title="Position space",
+        title=dict(text="Position space", pad=dict(b=8)),
         xaxis_title="x",
         yaxis_title="y",
         yaxis_scaleanchor="x",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend=_orbit_legend_layout(),
+        margin=dict(l=48, r=24, t=52, b=110),
     )
     return fig
 
 
-def _orbit_velocity_figure(data: dict, snap, circ, show_construction: bool) -> go.Figure:
+def _orbit_velocity_figure(
+    data: dict,
+    snap,
+    circ,
+    show_construction: bool,
+    triangles: list | None = None,
+) -> go.Figure:
     fig = go.Figure()
-    # Hodograph trail
     fig.add_trace(
         go.Scatter(
             x=np.append(data["vx"], data["vx"][0]),
             y=np.append(data["vy"], data["vy"][0]),
             mode="lines",
             name="hodograph",
-            line=dict(color=PALETTE["olive"], width=2),
+            line=dict(color=PALETTE["olive"], width=2.5),
         )
     )
-    # Analytic circle
     phi = np.linspace(0, 2 * np.pi, 200)
     fig.add_trace(
         go.Scatter(
@@ -1647,6 +1770,20 @@ def _orbit_velocity_figure(data: dict, snap, circ, show_construction: bool) -> g
             line=dict(color=PALETTE["ochre"], width=1.5, dash="dash"),
         )
     )
+    # Equal-angle |Δv| chords — equal length ⇒ circular hodograph
+    if triangles:
+        for i, t in enumerate(triangles):
+            fig.add_trace(
+                go.Scatter(
+                    x=[t.vx0, t.vx1],
+                    y=[t.vy0, t.vy1],
+                    mode="lines+markers",
+                    name="equal-∠ |Δv| chords" if i == 0 else f"Δv {i+1}",
+                    showlegend=(i == 0),
+                    line=dict(color=PALETTE["fail"], width=2),
+                    marker=dict(size=6, color=PALETTE["ink"]),
+                )
+            )
     fig.add_trace(
         go.Scatter(
             x=[0.0],
@@ -1699,11 +1836,64 @@ def _orbit_velocity_figure(data: dict, snap, circ, show_construction: bool) -> g
             )
         )
     fig.update_layout(
-        title="Velocity space (hodograph)",
+        title=dict(text="Velocity space (hodograph)", pad=dict(b=8)),
         xaxis_title="vₓ",
         yaxis_title="vᵧ",
         yaxis_scaleanchor="x",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend=_orbit_legend_layout(),
+        margin=dict(l=48, r=24, t=52, b=110),
+    )
+    return fig
+
+
+def _orbit_area_bar_figure(equal_area_df, equal_angle_df) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=equal_area_df["sector"],
+            y=equal_area_df["sector_area"],
+            name="equal-area sectors (Kepler II)",
+            marker_color=PALETTE["olive"],
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            x=equal_angle_df["sector"],
+            y=equal_angle_df["sector_area"],
+            name="equal-angle wedges",
+            marker_color=PALETTE["ochre"],
+        )
+    )
+    fig.update_layout(
+        title=dict(text="Polar sector areas ∫½r²dθ by partition", pad=dict(b=8)),
+        barmode="group",
+        xaxis_title="sector",
+        yaxis_title="sector area",
+        legend=_orbit_legend_layout(),
+        margin=dict(l=48, r=24, t=52, b=100),
+    )
+    return fig
+
+
+def _orbit_dv_bar_figure(equal_angle_df) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=equal_angle_df["sector"],
+            y=equal_angle_df["dv_mag"],
+            name="|Δv| over equal Δθ",
+            marker_color=PALETTE["fail"],
+        )
+    )
+    fig.update_layout(
+        title=dict(
+            text="Equal angles → equal |Δv| (why the hodograph is a circle)",
+            pad=dict(b=8),
+        ),
+        xaxis_title="equal-angle sector",
+        yaxis_title="|Δv|",
+        legend=_orbit_legend_layout(),
+        margin=dict(l=48, r=24, t=52, b=100),
     )
     return fig
 
@@ -1711,8 +1901,11 @@ def _orbit_velocity_figure(data: dict, snap, circ, show_construction: bool) -> g
 def tab_orbit_elementary(spec: DatasetSpec) -> None:
     from src.orbit_feynman import (
         construction_at_theta,
+        equal_angle_triangles,
+        equal_area_triangles,
         hodograph_circle,
         sample_orbit,
+        triangles_to_frame,
     )
 
     st.markdown("### Elementary demonstration")
@@ -1727,47 +1920,140 @@ def tab_orbit_elementary(spec: DatasetSpec) -> None:
         "Notebook: `notebooks/feynman_lost_lecture.ipynb`"
     )
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
         e = st.slider("Eccentricity e", 0.0, 0.85, 0.45, 0.01, key="orbit_e")
     with c2:
         a = st.slider("Semi-major axis a", 0.6, 2.0, 1.0, 0.05, key="orbit_a")
     with c3:
         theta_deg = st.slider("True anomaly θ (deg)", 0, 359, 40, 1, key="orbit_theta")
+    with c4:
+        n_sectors = st.slider("Triangle sectors", 4, 12, 8, 1, key="orbit_ntri")
     show_construction = st.checkbox(
         "Show eccentric-point / 90° construction overlay",
         value=True,
         key="orbit_construct",
+    )
+    sector_mode = st.radio(
+        "Position-space triangles",
+        [
+            "Equal area (Kepler II — equal times)",
+            "Equal angle (Feynman |Δv| argument)",
+        ],
+        horizontal=True,
+        key="orbit_sector_mode",
     )
 
     mu = 1.0
     data = sample_orbit(a=a, e=e, mu=mu, n=360)
     snap = construction_at_theta(np.deg2rad(theta_deg), a=a, e=e, mu=mu)
     circ = hodograph_circle(a=a, e=e, mu=mu)
+    area_tris = equal_area_triangles(a=a, e=e, mu=mu, n_sectors=n_sectors)
+    angle_tris = equal_angle_triangles(a=a, e=e, mu=mu, n_sectors=n_sectors)
+    pos_tris = area_tris if sector_mode.startswith("Equal area") else angle_tris
+    tri_label = (
+        "equal-area triangles"
+        if sector_mode.startswith("Equal area")
+        else "equal-angle wedges"
+    )
+    area_df = triangles_to_frame(area_tris)
+    angle_df = triangles_to_frame(angle_tris)
 
     left, right = st.columns(2)
     with left:
         st.plotly_chart(
-            apply_plotly_theme(_orbit_position_figure(data, snap, show_construction), height=460),
+            apply_plotly_theme(
+                _orbit_position_figure(
+                    data, snap, show_construction, triangles=pos_tris, triangle_label=tri_label
+                ),
+                height=520,
+            ),
             use_container_width=True,
         )
     with right:
         st.plotly_chart(
             apply_plotly_theme(
-                _orbit_velocity_figure(data, snap, circ, show_construction), height=460
+                _orbit_velocity_figure(
+                    data, snap, circ, show_construction, triangles=angle_tris
+                ),
+                height=520,
             ),
             use_container_width=True,
         )
     fig_note(
         f"At θ={theta_deg}°: |PF₁|+|PF₂|={snap.focus_sum:.4f} (target 2a={2*a:.4f}); "
-        f"h={snap.h:.4f}. Velocity tip p lies on the circle centered at the eccentric point C."
+        f"h={snap.h:.4f}. Red chords on the right are |Δv| over equal angles — "
+        "nearly equal lengths force a circular hodograph."
     )
+
+    st.markdown("#### How the triangular areas fit Kepler’s second law")
+    st.markdown(
+        r"""
+Following the lecture video:
+
+1. **Kepler II (equal areas in equal times).** The Sun–planet line sweeps triangles of
+   **equal area** in equal time. On an eccentric orbit that means **unequal angles**:
+   near periapsis (small $r$) the planet moves faster and sweeps a wider angle to keep
+   area $=\tfrac12 r\,v_\perp\,\Delta t$ fixed; near apoapsis the wedges are skinny.
+2. **Why that matters for Feynman.** Conserved $h=r v_\perp$ makes areal speed constant.
+   For the inverse-square force, $|\Delta v|\propto \Delta t/r^{2}$. Over a fixed angle,
+   $\Delta t \propto r^{2}$, so $|\Delta v|$ is **independent of $r$**. Equal-angle
+   velocity tips therefore form **equal chords** — the geometric signature of a circle.
+3. **Toggle above** switches the left panel between equal-**area** triangles (Kepler II
+   picture) and equal-**angle** wedges (the $|\\Delta v|$ clock that builds the hodograph).
+        """
+    )
+
+    b1, b2 = st.columns(2)
+    with b1:
+        st.plotly_chart(
+            apply_plotly_theme(_orbit_area_bar_figure(area_df, angle_df), height=380),
+            use_container_width=True,
+        )
+        fig_note(
+            "Equal-area bars stay flat by construction (∫½r²dθ). Equal-angle bars "
+            "vary with r — periapsis wedges sweep less area for the same Δθ."
+        )
+    with b2:
+        st.plotly_chart(
+            apply_plotly_theme(_orbit_dv_bar_figure(angle_df), height=380),
+            use_container_width=True,
+        )
+        fig_note(
+            "Equal Δθ ⇒ nearly constant |Δv|. That is why translating those chords "
+            "onto the velocity origin draws a regular polygon → a circle."
+        )
+
+    t1, t2 = st.columns(2)
+    with t1:
+        st.markdown("**Equal-area sectors (Kepler II)**")
+        show_area = area_df.copy()
+        for col in ("theta0_deg", "theta1_deg", "dtheta_deg"):
+            show_area[col] = show_area[col].round(1)
+        show_area["sector_area"] = show_area["sector_area"].round(5)
+        show_area["triangle_area"] = show_area["triangle_area"].round(5)
+        show_area["dv_mag"] = show_area["dv_mag"].round(4)
+        st.dataframe(show_area, use_container_width=True, hide_index=True)
+        st.caption(
+            "`sector_area` = ∫½r²dθ (equal by Kepler II). "
+            "`triangle_area` is the drawn chord triangle (smaller when Δθ is large)."
+        )
+    with t2:
+        st.markdown("**Equal-angle wedges (Feynman |Δv|)**")
+        show_ang = angle_df.copy()
+        for col in ("theta0_deg", "theta1_deg", "dtheta_deg"):
+            show_ang[col] = show_ang[col].round(1)
+        show_ang["sector_area"] = show_ang["sector_area"].round(5)
+        show_ang["triangle_area"] = show_ang["triangle_area"].round(5)
+        show_ang["dv_mag"] = show_ang["dv_mag"].round(4)
+        st.dataframe(show_ang, use_container_width=True, hide_index=True)
+        st.caption("`dv_mag` stays flat — equal angles ⇒ equal |Δv| ⇒ circular hodograph.")
 
     with st.expander("1 · Setup — the physical system", expanded=True):
         st.markdown(
-            "The Sun sits at a **focus**. The planet’s position $\\mathbf{r}$ and "
-            "velocity $\\mathbf{v}$ update with true anomaly $\\theta$. "
-            "Kepler’s first law claims the path is an ellipse — that is what we prove."
+            "The Sun sits at a **focus**. Radial lines to the planet carve **triangles** "
+            "whose areas encode Kepler’s second law. Kepler’s first law claims the path "
+            "is an ellipse — that is what we prove."
         )
     with st.expander("2 · Introducing the velocity diagram"):
         st.markdown(
@@ -1777,14 +2063,16 @@ def tab_orbit_elementary(spec: DatasetSpec) -> None:
             "radial (toward the Sun). For the inverse-square law the tips form a "
             "**perfect circle**."
         )
-    with st.expander("3 · Inverse-square + equal areas"):
+    with st.expander("3 · Triangles, equal areas, and equal |Δv|", expanded=True):
         st.markdown(
             r"""
 - **Newton:** $F = -GMm/r^{2}\,\hat{\mathbf{r}}$ so $|\Delta v|\propto \Delta t / r^{2}$.
-- **Kepler II:** equal areas in equal times $\Leftrightarrow$ $h = r\,v_{\perp}$ constant,
-  so the time to sweep a fixed angle scales as $r^{2}$.
-- Combining these: **equal changes in velocity occur in equal orbital angles** — hence
-  equal chord lengths on the velocity diagram, which force a circle.
+- **Kepler II:** equal areas in equal times $\Leftrightarrow$ $h = r\,v_{\perp}$ constant.
+  The shaded **equal-area triangles** on the left are the video’s “pie slices” of equal
+  areal sweep; their angular widths $\Delta\theta$ shrink as $r$ grows.
+- **Feynman’s clock:** over **equal angles**, $\Delta t \propto r^{2}$, cancelling the
+  $1/r^{2}$ in $|\Delta v|$. The red **equal chords** on the hodograph are those
+  $|\Delta v|$ steps — equal chord lengths around a path force a **circle**.
             """
         )
     with st.expander("4 · The eccentric point and 90° rotation"):

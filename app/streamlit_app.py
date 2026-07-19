@@ -21,16 +21,6 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.stats import (  # noqa: E402
-    assumption_checks,
-    detect_anomalies,
-    one_way_anova,
-    physics_validation,
-    pairwise_ttests,
-    simulate_anova_groups,
-    two_way_anova,
-)
-
 FEATURES_PATH = ROOT / "data" / "features.parquet"
 RESPONSE_OPTIONS = [
     "nematic_order_S",
@@ -254,7 +244,18 @@ h1 {{
     text-underline-offset: 0.12em;
 }}
 
-/* Tabs — ruled notebook feel */
+/* Section switcher (replaces tabs so only one panel runs) */
+.stRadio [role="radiogroup"] {{
+    gap: 0.15rem;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 0.15rem;
+    margin-bottom: 0.85rem;
+}}
+.stRadio [data-testid="stMarkdownContainer"] p {{
+    font-family: "IBM Plex Mono", ui-monospace, monospace !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.04em;
+}}
 .stTabs [data-baseweb="tab-list"] {{
     gap: 0.15rem;
     border-bottom: 1.5px solid var(--ink);
@@ -375,8 +376,17 @@ def apply_plotly_theme(fig: go.Figure, height: int = 400) -> go.Figure:
     return fig
 
 
+@st.cache_data(show_spinner=False)
 def load_features() -> pd.DataFrame:
     if not FEATURES_PATH.exists():
+        raise FileNotFoundError(str(FEATURES_PATH))
+    return pd.read_parquet(FEATURES_PATH)
+
+
+def load_features_or_stop() -> pd.DataFrame:
+    try:
+        return load_features()
+    except FileNotFoundError:
         st.error(
             f"Missing `{FEATURES_PATH}`. Run:\n\n"
             "`python -m src.extract_features --splits train`\n\n"
@@ -384,7 +394,6 @@ def load_features() -> pd.DataFrame:
             "`python -m src.extract_features --synthetic`"
         )
         st.stop()
-    return pd.read_parquet(FEATURES_PATH)
 
 
 def data_provenance(df: pd.DataFrame) -> dict:
@@ -515,6 +524,8 @@ def variance_decomposition_fig(ss_between: float, ss_within: float) -> go.Figure
 # Tab 1 — teaching sandbox
 # ---------------------------------------------------------------------------
 def tab_teaching() -> None:
+    from src.stats import simulate_anova_groups
+
     st.markdown("### Interactive ANOVA sandbox")
     st.markdown(
         "Change the **difference between group means** and the **dispersion within groups**, "
@@ -609,6 +620,13 @@ def tab_teaching() -> None:
 # Tab 2 — real-data ANOVA
 # ---------------------------------------------------------------------------
 def tab_realdata(df: pd.DataFrame) -> None:
+    from src.stats import (
+        assumption_checks,
+        one_way_anova,
+        pairwise_ttests,
+        two_way_anova,
+    )
+
     st.markdown("### ANOVA on active_matter features")
     if df.get("synthetic", pd.Series([False])).fillna(False).any():
         st.info(
@@ -707,6 +725,8 @@ def tab_realdata(df: pd.DataFrame) -> None:
 # Tab 3 — physics + anomalies
 # ---------------------------------------------------------------------------
 def tab_physics(df: pd.DataFrame) -> None:
+    from src.stats import detect_anomalies, physics_validation
+
     st.markdown("### Physics validation & anomalies")
 
     phys = physics_validation(df)
@@ -836,17 +856,22 @@ def main() -> None:
         initial_sidebar_state="collapsed",
     )
     inject_lab_css()
-    df = load_features()
+    df = load_features_or_stop()
     lab_header(df)
 
-    tab1, tab2, tab3 = st.tabs(
-        ["ANOVA sandbox", "Real-data ANOVA", "Physics & anomalies"]
+    # Only render the selected panel (st.tabs runs every tab body every rerun).
+    panel = st.radio(
+        "Section",
+        ["ANOVA sandbox", "Real-data ANOVA", "Physics & anomalies"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="lab_panel",
     )
-    with tab1:
+    if panel == "ANOVA sandbox":
         tab_teaching()
-    with tab2:
+    elif panel == "Real-data ANOVA":
         tab_realdata(df)
-    with tab3:
+    else:
         tab_physics(df)
 
     lab_footer()

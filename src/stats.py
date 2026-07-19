@@ -11,11 +11,7 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
-import pingouin as pg
 from scipy import stats
-from statsmodels.formula.api import ols
-from statsmodels.stats.anova import anova_lm
-from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 
 VerdictLevel = Literal[
@@ -88,6 +84,8 @@ def verdict_from_p_and_eta(p: float, eta_sq: float, alpha: float = 0.05) -> tupl
 
 def one_way_anova(df: pd.DataFrame, response: str, factor: str) -> dict:
     """One-way ANOVA with effect sizes and Tukey HSD."""
+    from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
     data = df[[response, factor]].dropna().copy()
     data[factor] = data[factor].astype(str)
     groups = [g[response].to_numpy() for _, g in data.groupby(factor)]
@@ -136,6 +134,9 @@ def one_way_anova(df: pd.DataFrame, response: str, factor: str) -> dict:
 
 def two_way_anova(df: pd.DataFrame, response: str, factor_a: str, factor_b: str) -> dict:
     """Two-way ANOVA with interaction: response ~ C(A) * C(B)."""
+    from statsmodels.formula.api import ols
+    from statsmodels.stats.anova import anova_lm
+
     data = df[[response, factor_a, factor_b]].dropna().copy()
     data[factor_a] = data[factor_a].astype(str)
     data[factor_b] = data[factor_b].astype(str)
@@ -196,6 +197,8 @@ def pairwise_ttests(
     padjust: str = "holm",
 ) -> pd.DataFrame:
     """All pairwise Welch t-tests with multiple-comparison correction (pingouin)."""
+    import pingouin as pg
+
     data = df[[response, factor]].dropna().copy()
     data[factor] = data[factor].astype(str)
     return pg.pairwise_tests(

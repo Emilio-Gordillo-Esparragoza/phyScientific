@@ -4,11 +4,13 @@ Statistical analysis and an interactive ANOVA dashboard for physics simulations 
 
 Supported ensembles (sidebar picker):
 
-| Lab id | Hugging Face dataset | Factors |
-|--------|----------------------|---------|
-| `active_matter` | `polymathic-ai/active_matter` | `alpha` × `zeta` |
-| `gray_scott` | `polymathic-ai/gray_scott_reaction_diffusion` | `f` × `k` (6 named regimes) |
-| `acoustic_scattering` | `polymathic-ai/acoustic_scattering_maze` | `maze_width` × `n_sources` |
+| Lab id | Hugging Face dataset | Analysis mode | Factors |
+|--------|----------------------|---------------|---------|
+| `active_matter` | `polymathic-ai/active_matter` | ANOVA (sandbox + real-data) | `alpha` × `zeta` |
+| `gray_scott` | `polymathic-ai/gray_scott_reaction_diffusion` | **(f, k) phase diagram** + metrics vs params | `f` × `k` (6 regimes) |
+| `acoustic_scattering` | `polymathic-ai/acoustic_scattering_maze` | **Response surfaces / interaction plots** | `maze_width` × `n_sources` |
+
+ANOVA panels appear **only** for `active_matter`. Gray–Scott and acoustic use exploratory phase-diagram and multiparameter views instead.
 
 **Live demo:** [https://physcientific.onrender.com/](https://physcientific.onrender.com/)  
 *(Render free tier may cold-start for ~30–60s after idle.)*
@@ -170,13 +172,17 @@ streamlit run app/streamlit_app.py
 
 ### Tabs
 
-| Tab | Content |
-|-----|---------|
-| **ANOVA sandbox** | Sliders for #groups, n, mean difference, within-group SD → live F, p, SSE, η², and an evidence verdict. |
-| **Real-data ANOVA** | One-way / two-way ANOVA and pairwise t-tests on the selected dataset’s feature table. |
-| **Physics & anomalies** | Catalog-driven physics checks + within-cell anomaly table. |
+Panels depend on the selected dataset:
+
+| Dataset | Panel 1 | Panel 2 | Panel 3 |
+|---------|---------|---------|---------|
+| **active_matter** | ANOVA sandbox | Real-data ANOVA | Physics & anomalies |
+| **gray_scott** | F×k phase diagram | Pattern metrics vs params | Physics & anomalies |
+| **acoustic_scattering** | Geometry × sources | Response & interactions | Physics & anomalies |
 
 Open the **sidebar** (hamburger, top-left) to switch ensembles.
+
+Notebooks: [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb) (active_matter ANOVA), [`notebooks/gray_scott_analysis.ipynb`](notebooks/gray_scott_analysis.ipynb), [`notebooks/acoustic_scattering_analysis.ipynb`](notebooks/acoustic_scattering_analysis.ipynb).
 ## Deploy on Render
 
 The public demo is a **Render** Web Service (Streamlit needs a long-running process; Vercel/Supabase alone are not suitable without a rewrite).

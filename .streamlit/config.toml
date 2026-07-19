@@ -10,6 +10,7 @@ gatherUsageStats = false
 base = "light"
 primaryColor = "#5F6B45"
 backgroundColor = "#E6E2D6"
-secondaryBackgroundColor = "#D8D2C2"
+# Match page paper so Streamlit widget chrome does not paint a beige slab over sliders.
+secondaryBackgroundColor = "#E6E2D6"
 textColor = "#1A1814"
 font = "serif"

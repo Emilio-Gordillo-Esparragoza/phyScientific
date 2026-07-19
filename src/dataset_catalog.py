@@ -49,6 +49,8 @@ class DatasetSpec:
     footer_label: str
     feature_path: Path
     legacy_feature_paths: tuple[Path, ...] = ()
+    # "anova" | "phase" | "interaction" — drives which Streamlit panels appear
+    analysis_mode: str = "anova"
     factor_a: str = "alpha"
     factor_b: str = "zeta"
     factor_a_label: str = "α"
@@ -62,6 +64,11 @@ class DatasetSpec:
     scatter_color: str = ""
     scatter_title: str = ""
     hf_url: str = ""
+    panel_labels: tuple[str, str, str] = (
+        "ANOVA sandbox",
+        "Real-data ANOVA",
+        "Physics & anomalies",
+    )
 
 
 def _resolve_feature_path(spec: DatasetSpec) -> Path:
@@ -95,6 +102,7 @@ ACTIVE_MATTER = DatasetSpec(
     footer_label="PolymathicAI · The Well · active_matter",
     feature_path=ROOT / "data" / "features_active_matter.parquet",
     legacy_feature_paths=(ROOT / "data" / "features.parquet",),
+    analysis_mode="anova",
     factor_a="alpha",
     factor_b="zeta",
     factor_a_label="α",
@@ -156,26 +164,27 @@ ACTIVE_MATTER = DatasetSpec(
     scatter_color="alpha",
     scatter_title="Nematic order S vs zeta (colored by alpha)",
     hf_url="https://huggingface.co/datasets/polymathic-ai/active_matter",
+    panel_labels=("ANOVA sandbox", "Real-data ANOVA", "Physics & anomalies"),
 )
 
 GRAY_SCOTT = DatasetSpec(
     id="gray_scott",
     hf_name="gray_scott_reaction_diffusion",
-    title="gray_scott · feed, kill & pattern",
+    title="gray_scott · (f, k) phase diagram",
     lede=(
-        "Quantify how feed (f) and kill (k) rates shape Gray–Scott pattern metrics, "
-        "with ANOVA across the six named regimes and within-cell anomaly flags."
+        "Map reaction–diffusion regimes on the feed–kill plane: phase diagrams of "
+        "pattern metrics, and how concentration / contrast respond to (f, k)."
     ),
     blurb=(
         "<code>gray_scott_reaction_diffusion</code> (The Well) is a reaction–diffusion "
-        "ensemble of two chemical species <b>A</b> and <b>B</b>. Six discrete "
-        "<code>(f, k)</code> pairs produce named patterns (Gliders, Bubbles, Maze, "
-        "Worms, Spirals, Spots). We treat <code>f</code> and <code>k</code> as "
-        "circumstance factors and extract concentration means/stds, pattern contrast, "
-        "time-to-steady, and spectral slope for ANOVA."
+        "ensemble of species <b>A</b> and <b>B</b>. Six discrete <code>(f, k)</code> pairs "
+        "produce named patterns (Gliders, Bubbles, Maze, Worms, Spirals, Spots). "
+        "This lab treats the <b>(f, k) grid as a sparse factorial / phase diagram</b> — "
+        "not an ANOVA sandbox — and plots pattern metrics against parameters."
     ),
     footer_label="PolymathicAI · The Well · gray_scott_reaction_diffusion",
     feature_path=ROOT / "data" / "features_gray_scott.parquet",
+    analysis_mode="phase",
     factor_a="f",
     factor_b="k",
     factor_a_label="f",
@@ -209,7 +218,7 @@ GRAY_SCOTT = DatasetSpec(
         ),
         PhysicsCheckSpec(
             key="pattern_diversity",
-            title="Contrast vs pattern regime",
+            title="Contrast vs feed rate",
             kind="spearman",
             x="f",
             y="pattern_contrast",
@@ -221,34 +230,40 @@ GRAY_SCOTT = DatasetSpec(
     ),
     findings_real=(
         "On <b>{n_rows}</b> trajectories across <b>{n_cells}</b> (f, k) regime cells, "
-        "pattern contrast and concentration statistics separate the six named Gray–Scott "
-        "regimes. Use one-way ANOVA on <code>pattern</code> (via f or k) or two-way on "
-        "the sparse <code>f × k</code> design (only six observed pairs)."
+        "the six named patterns separate cleanly in contrast and concentration space. "
+        "Explore the <b>phase diagram</b> and metric-vs-parameter panels (no ANOVA here)."
     ),
     scatter_x="f",
     scatter_y="pattern_contrast",
-    scatter_color="k",
-    scatter_title="Pattern contrast vs feed f (colored by kill k)",
+    scatter_color="pattern",
+    scatter_title="Pattern contrast vs feed f (colored by regime)",
     hf_url="https://huggingface.co/datasets/polymathic-ai/gray_scott_reaction_diffusion",
+    panel_labels=(
+        "F×k phase diagram",
+        "Pattern metrics vs params",
+        "Physics & anomalies",
+    ),
 )
 
 ACOUSTIC = DatasetSpec(
     id="acoustic_scattering",
     hf_name="acoustic_scattering_maze",
-    title="acoustic_scattering · maze geometry & sources",
+    title="acoustic_scattering · geometry & response",
     lede=(
-        "Quantify how maze path width and source count shape acoustic pressure metrics, "
-        "with ANOVA evidence, energy checks, and within-cell anomaly flags."
+        "Explore how maze geometry and source count reshape pressure energy: "
+        "multiparameter response surfaces and interaction plots (not ANOVA)."
     ),
     blurb=(
         "<code>acoustic_scattering_maze</code> (The Well) models pressure-wave "
-        "propagation through maze-like density fields (dense walls, light paths). "
-        "Circumstance factors are <code>maze_width</code> (path width in pixels) and "
-        "<code>n_sources</code> (initial high-pressure rings). Responses include mean "
-        "|p|, pressure energy, kinetic energy, wall fraction, and spectral slope."
+        "propagation through maze-like density fields. Circumstance factors are "
+        "<code>maze_width</code> (path geometry) and <code>n_sources</code>. "
+        "Spectral slope acts as a <b>frequency-content proxy</b> of the scattered field. "
+        "This lab emphasizes <b>response surfaces and interaction plots</b> across "
+        "geometry × sources — not factorial ANOVA."
     ),
     footer_label="PolymathicAI · The Well · acoustic_scattering_maze",
     feature_path=ROOT / "data" / "features_acoustic_scattering.parquet",
+    analysis_mode="interaction",
     factor_a="maze_width",
     factor_b="n_sources",
     factor_a_label="width",
@@ -291,14 +306,19 @@ ACOUSTIC = DatasetSpec(
     ),
     findings_real=(
         "On <b>{n_rows}</b> trajectories across <b>{n_cells}</b> width×source cells, "
-        "maze geometry and source count modulate pressure energy. Dense walls act as "
-        "slow-sound regions (partial reflection), not hard blocks."
+        "geometry and source count jointly shape pressure energy and spectral slope. "
+        "Use the interaction / response panels to see multiparameter effects."
     ),
     scatter_x="n_sources",
     scatter_y="pressure_energy",
     scatter_color="maze_width",
     scatter_title="Pressure energy vs n_sources (colored by maze_width)",
     hf_url="https://huggingface.co/datasets/polymathic-ai/acoustic_scattering_maze",
+    panel_labels=(
+        "Geometry × sources",
+        "Response & interactions",
+        "Physics & anomalies",
+    ),
 )
 
 DATASETS: dict[str, DatasetSpec] = {

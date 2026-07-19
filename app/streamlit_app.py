@@ -327,10 +327,50 @@ div[data-testid="column"] .stSlider {{
 }}
 .lab-controls {{
     margin: 0.85rem 0 1.1rem 0;
-    padding: 0.85rem 1rem 0.55rem;
-    background: var(--paper-deep);
-    border: 1px solid var(--grid);
+    padding: 0;
+    background: transparent;
+    border: none;
 }}
+
+/* Prevent empty HTML “chrome” boxes from covering sliders / radios */
+div.lab-controls:empty,
+div.stElementContainer:has(> div.lab-controls:empty) {{
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}}
+.stRadio, .stRadio > div, .stRadio [role="radiogroup"],
+div[data-testid="stSlider"],
+div[data-baseweb="slider"],
+div[data-testid="stNumberInput"],
+div[data-testid="stSelectbox"],
+div[data-testid="stWidgetLabel"],
+div[data-testid="column"] {{
+    background: transparent !important;
+}}
+div[data-testid="stHorizontalBlock"] {{
+    background: transparent !important;
+}}
+/* Kill opaque Streamlit widget chrome that reads as a beige slab */
+[data-baseweb="select"] > div,
+[data-baseweb="base-input"],
+[data-baseweb="input"],
+[data-baseweb="textarea"],
+div[data-testid="stNumberInputContainer"],
+div[data-testid="stSelectbox"] > div,
+div[data-testid="stSlider"] input {{
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}}
+div[data-testid="stSlider"] input {{
+    border: 1px solid var(--grid) !important;
+    color: var(--ink) !important;
+}}
+/* Keep metric / verdict cards as intentional paper-deep panels only */
 
 /* Expanders / dataframes */
 .streamlit-expanderHeader {{
@@ -509,7 +549,8 @@ def render_dataset_sidebar() -> DatasetSpec:
         st.markdown('<p class="lab-sidebar-kicker">Dataset</p>', unsafe_allow_html=True)
         st.markdown(
             '<p class="lab-sidebar-hint">Choose a The Well ensemble. '
-            "ANOVA sandbox stays the same; real-data panels reload features.</p>",
+            "active_matter keeps ANOVA; gray_scott and acoustic use phase / "
+            "interaction views instead.</p>",
             unsafe_allow_html=True,
         )
         labels = {
@@ -688,7 +729,6 @@ def tab_teaching() -> None:
         "(variation between groups / variation within groups)."
     )
 
-    st.markdown('<div class="lab-controls">', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4, gap="medium")
     with c1:
         ctrl_label("Number of groups")
@@ -744,7 +784,6 @@ def tab_teaching() -> None:
             label_visibility="collapsed",
             help="Fixes the random draws so the same knobs give the same sample.",
         )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     result = simulate_anova_groups(
         n_groups=n_groups,
@@ -1182,6 +1221,265 @@ def tab_physics(df: pd.DataFrame, spec: DatasetSpec) -> None:
     glossary_block()
 
 
+# ---------------------------------------------------------------------------
+# Gray–Scott — F×k phase diagram (not ANOVA)
+# ---------------------------------------------------------------------------
+def tab_phase_diagram(df: pd.DataFrame, spec: DatasetSpec) -> None:
+    st.markdown("### (f, k) phase diagram")
+    st.markdown(
+        "Each Gray–Scott regime is a point on the **feed–kill plane**. "
+        "Cell color shows the mean of a pattern metric — a sparse factorial / "
+        "phase diagram rather than an ANOVA table."
+    )
+    responses = [c for c in spec.response_options if c in df.columns]
+    if not responses:
+        st.error("No response columns available.")
+        return
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
+    metric = st.selectbox("Phase-diagram metric", responses, index=default_idx)
+
+    cell = (
+        df.groupby(["f", "k", "pattern"], as_index=False)[metric]
+        .mean()
+        .sort_values(["k", "f"])
+    )
+    fig = px.scatter(
+        cell,
+        x="f",
+        y="k",
+        color=metric,
+        size=metric,
+        text="pattern",
+        title=f"Gray–Scott phase diagram — mean {metric}",
+        color_continuous_scale=["#D8D2C2", PALETTE["ochre"], PALETTE["olive"]],
+        labels={"f": "feed f", "k": "kill k"},
+    )
+    fig.update_traces(textposition="top center", marker=dict(line=dict(width=1, color=PALETTE["ink"])))
+    st.plotly_chart(apply_plotly_theme(fig, height=460), use_container_width=True)
+    fig_note(
+        "Named regimes sit at discrete **(f, k)** pairs. Color/size encode the "
+        f"mean **{metric}** within each regime — the classic reaction–diffusion phase map."
+    )
+
+    pivot = cell.pivot_table(index="k", columns="f", values=metric)
+    fig_h = go.Figure(
+        data=go.Heatmap(
+            z=pivot.values,
+            x=[f"{c:g}" for c in pivot.columns],
+            y=[f"{r:g}" for r in pivot.index],
+            colorscale=[[0, "#E6E2D6"], [0.5, PALETTE["ochre_soft"]], [1, PALETTE["olive"]]],
+            colorbar=dict(title=metric),
+        )
+    )
+    fig_h.update_layout(title=f"Sparse (f, k) heatmap of {metric}", xaxis_title="f", yaxis_title="k")
+    st.plotly_chart(apply_plotly_theme(fig_h, height=380), use_container_width=True)
+    fig_note(
+        "Only six cells are occupied (sparse design). Empty grid cells are not "
+        "simulated in The Well release — this is a **factorial sample**, not a dense sweep."
+    )
+    st.dataframe(cell, use_container_width=True)
+
+
+def tab_pattern_metrics(df: pd.DataFrame, spec: DatasetSpec) -> None:
+    st.markdown("### Pattern metrics vs parameters")
+    st.markdown(
+        "How concentration statistics and contrast change with **f**, **k**, and named regime. "
+        "Correlation and scatter views — exploratory data analysis, not hypothesis tests."
+    )
+    responses = [c for c in spec.response_options if c in df.columns]
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        metric = st.selectbox("Metric", responses, index=default_idx, key="gs_metric")
+    with c2:
+        x_axis = st.selectbox("X parameter", ["f", "k", "pattern"], index=0)
+
+    color_col = "pattern" if "pattern" in df.columns else spec.factor_b
+    fig = px.box(
+        df,
+        x=df[x_axis].astype(str) if x_axis != "pattern" else df["pattern"],
+        y=metric,
+        color=df[color_col].astype(str),
+        points="all",
+        title=f"{metric} vs {x_axis}",
+        color_discrete_sequence=PLOTLY_COLORS,
+    )
+    st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+    fig_note(
+        f"**{metric}** stratified by **{x_axis}**. Separation across regimes is the "
+        "phase-diagram story in distributional form."
+    )
+
+    fig_s = px.scatter(
+        df,
+        x="f",
+        y="k",
+        color=metric,
+        symbol="pattern" if "pattern" in df.columns else None,
+        title=f"Trajectories in (f, k) colored by {metric}",
+        color_continuous_scale=["#D8D2C2", PALETTE["ochre"], PALETTE["olive"]],
+        opacity=0.75,
+    )
+    st.plotly_chart(apply_plotly_theme(fig_s, height=420), use_container_width=True)
+
+    num_cols = [c for c in ["f", "k", *responses] if c in df.columns]
+    corr = df[num_cols].corr(method="spearman")
+    fig_c = px.imshow(
+        corr,
+        text_auto=".2f",
+        color_continuous_scale=["#7A3E32", "#E6E2D6", PALETTE["olive"]],
+        title="Spearman correlation — params & pattern metrics",
+        aspect="auto",
+    )
+    st.plotly_chart(apply_plotly_theme(fig_c, height=420), use_container_width=True)
+    fig_note(
+        "Spearman rank correlations among parameters and metrics. Strong |ρ| between "
+        "a parameter and a metric suggests a clear phase-map direction."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Acoustic — multiparameter / interaction plots (not ANOVA)
+# ---------------------------------------------------------------------------
+def tab_geometry_sources(df: pd.DataFrame, spec: DatasetSpec) -> None:
+    st.markdown("### Geometry × sources response surface")
+    st.markdown(
+        "Maze **path width** and **source count** jointly set the acoustic field. "
+        "Heatmaps and mean response surfaces replace ANOVA for this ensemble."
+    )
+    responses = [c for c in spec.response_options if c in df.columns]
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
+    metric = st.selectbox("Response metric", responses, index=default_idx, key="ac_surf")
+
+    cell = (
+        df.groupby(["maze_width", "n_sources"], as_index=False)[metric]
+        .mean()
+        .sort_values(["maze_width", "n_sources"])
+    )
+    pivot = cell.pivot(index="maze_width", columns="n_sources", values=metric)
+    fig_h = go.Figure(
+        data=go.Heatmap(
+            z=pivot.values,
+            x=[str(c) for c in pivot.columns],
+            y=[str(r) for r in pivot.index],
+            colorscale=[[0, "#E6E2D6"], [0.5, PALETTE["ochre_soft"]], [1, PALETTE["olive"]]],
+            colorbar=dict(title=metric),
+        )
+    )
+    fig_h.update_layout(
+        title=f"Mean {metric} — maze_width × n_sources",
+        xaxis_title="n_sources",
+        yaxis_title="maze_width",
+    )
+    st.plotly_chart(apply_plotly_theme(fig_h, height=420), use_container_width=True)
+    fig_note(
+        "Each cell is the mean response at that geometry × source count. "
+        "Look for **rows** (geometry main effect), **columns** (source main effect), "
+        "or **tilted gradients** (interaction)."
+    )
+
+    fig = px.line(
+        cell,
+        x="n_sources",
+        y=metric,
+        color=cell["maze_width"].astype(str),
+        markers=True,
+        title=f"Interaction plot: {metric} vs n_sources by maze_width",
+        color_discrete_sequence=PLOTLY_COLORS,
+        labels={"color": "maze_width"},
+    )
+    st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+    fig_note(
+        "Classic **interaction plot**: non-parallel curves mean geometry changes how "
+        "source count maps to the response."
+    )
+
+
+def tab_response_interactions(df: pd.DataFrame, spec: DatasetSpec) -> None:
+    st.markdown("### Multiparameter effects & frequency-content proxy")
+    st.markdown(
+        "Pressure energy and **spectral slope** (frequency-content proxy of the scattered "
+        "field) versus geometry and sources. Correlation and faceted scatters — EDA / "
+        "response analysis, not ANOVA."
+    )
+    responses = [c for c in spec.response_options if c in df.columns]
+    default_idx = (
+        responses.index(spec.default_response)
+        if spec.default_response in responses
+        else 0
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        y_metric = st.selectbox("Y response", responses, index=default_idx, key="ac_y")
+    with c2:
+        x_param = st.selectbox("X factor", ["n_sources", "maze_width", "wall_fraction"], index=0)
+
+    color = "maze_width" if x_param != "maze_width" else "n_sources"
+    fig = px.scatter(
+        df,
+        x=x_param,
+        y=y_metric,
+        color=df[color].astype(str),
+        title=f"{y_metric} vs {x_param}",
+        color_discrete_sequence=PLOTLY_COLORS,
+        opacity=0.7,
+        labels={"color": color},
+    )
+    st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+    fig_note(
+        f"Scatter of **{y_metric}** vs **{x_param}**, colored by **{color}** — "
+        "multiparameter structure without assuming an ANOVA model."
+    )
+
+    if "spectral_slope" in df.columns:
+        fig_f = px.box(
+            df,
+            x=df["maze_width"].astype(str),
+            y="spectral_slope",
+            color=df["n_sources"].astype(str),
+            title="Spectral slope (frequency-content proxy) by geometry × sources",
+            color_discrete_sequence=PLOTLY_COLORS,
+            labels={"x": "maze_width", "color": "n_sources"},
+        )
+        st.plotly_chart(apply_plotly_theme(fig_f, height=400), use_container_width=True)
+        fig_note(
+            "**Spectral slope** summarizes how energy is distributed across spatial "
+            "frequencies after scattering — a frequency-response style readout for this maze ensemble."
+        )
+
+    num_cols = [
+        c
+        for c in [
+            "maze_width",
+            "n_sources",
+            "wall_fraction",
+            *responses,
+        ]
+        if c in df.columns
+    ]
+    corr = df[num_cols].corr(method="spearman")
+    fig_c = px.imshow(
+        corr,
+        text_auto=".2f",
+        color_continuous_scale=["#7A3E32", "#E6E2D6", PALETTE["olive"]],
+        title="Spearman correlation — geometry, sources, responses",
+        aspect="auto",
+    )
+    st.plotly_chart(apply_plotly_theme(fig_c, height=440), use_container_width=True)
+
+
 def main() -> None:
     st.set_page_config(
         page_title="statistical laboratory · The Well",
@@ -1194,20 +1492,39 @@ def main() -> None:
     df = load_features_or_stop(spec)
     lab_header(df, spec)
 
-    # Only render the selected panel (st.tabs runs every tab body every rerun).
+    # Dataset-specific panels: ANOVA only for active_matter
+    labels = list(spec.panel_labels)
+    # Reset panel key when dataset changes so we don't keep a stale ANOVA label
+    panel_key = f"lab_panel_{spec.id}"
     panel = st.radio(
         "Section",
-        ["ANOVA sandbox", "Real-data ANOVA", "Physics & anomalies"],
+        labels,
         horizontal=True,
         label_visibility="collapsed",
-        key="lab_panel",
+        key=panel_key,
     )
-    if panel == "ANOVA sandbox":
-        tab_teaching()
-    elif panel == "Real-data ANOVA":
-        tab_realdata(df, spec)
-    else:
-        tab_physics(df, spec)
+
+    if spec.analysis_mode == "anova":
+        if panel == labels[0]:
+            tab_teaching()
+        elif panel == labels[1]:
+            tab_realdata(df, spec)
+        else:
+            tab_physics(df, spec)
+    elif spec.analysis_mode == "phase":
+        if panel == labels[0]:
+            tab_phase_diagram(df, spec)
+        elif panel == labels[1]:
+            tab_pattern_metrics(df, spec)
+        else:
+            tab_physics(df, spec)
+    else:  # interaction
+        if panel == labels[0]:
+            tab_geometry_sources(df, spec)
+        elif panel == labels[1]:
+            tab_response_interactions(df, spec)
+        else:
+            tab_physics(df, spec)
 
     lab_footer(spec)
 

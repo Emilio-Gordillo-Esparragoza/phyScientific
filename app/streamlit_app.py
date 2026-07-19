@@ -306,6 +306,37 @@ div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
     color: var(--graphite) !important;
 }}
 
+/* Align slider tracks when labels differ in length */
+div[data-testid="column"] .stSlider {{
+    margin-top: 0;
+}}
+.ctrl-label {{
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    min-height: 2.4rem;
+    display: flex;
+    align-items: flex-end;
+    margin: 0 0 0.35rem 0;
+    line-height: 1.25;
+}}
+.lab-note {{
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 0.95rem;
+    color: var(--graphite);
+    line-height: 1.45;
+    max-width: 46rem;
+    margin: 0.35rem 0 1.1rem 0;
+}}
+.lab-controls {{
+    margin: 0.85rem 0 1.1rem 0;
+    padding: 0.85rem 1rem 0.55rem;
+    background: var(--paper-deep);
+    border: 1px solid var(--grid);
+}}
+
 /* Expanders / dataframes */
 .streamlit-expanderHeader {{
     font-family: "Source Serif 4", Georgia, serif !important;
@@ -520,6 +551,52 @@ def variance_decomposition_fig(ss_between: float, ss_within: float) -> go.Figure
     return apply_plotly_theme(fig, height=360)
 
 
+def fig_note(text: str) -> None:
+    """Short caption under a plot or table (supports **bold** via HTML)."""
+    import html
+    import re
+
+    escaped = html.escape(text)
+    rich = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    st.markdown(f'<p class="lab-note">{rich}</p>', unsafe_allow_html=True)
+
+
+def ctrl_label(text: str) -> None:
+    st.markdown(f'<div class="ctrl-label">{text}</div>', unsafe_allow_html=True)
+
+
+def glossary_block() -> None:
+    with st.expander("Glossary — variables, plots, and statistics", expanded=False):
+        st.markdown(
+            r"""
+**Control / physics factors**
+- **α (alpha)** — dipole strength of the active rods (more negative → stronger activity).
+- **ζ (zeta)** — alignment strength; larger ζ favors ordered (nematic-like) states.
+- **L** — domain linear size (fixed at 10 in this extract).
+
+**Response features (per trajectory)**
+- **nematic_order_S** — orientation-order magnitude from the orientation tensor (higher ⇒ more ordered).
+- **nematic_order_S_final** — order near the end of the trajectory.
+- **kinetic_energy** — mean \(\tfrac12|u|^2\) of the velocity field.
+- **enstrophy** — mean squared vorticity (spin / shear intensity).
+- **mean_concentration / std_concentration** — average particle density and its spatial spread.
+- **div_u_rms** — RMS of discrete \(\nabla\cdot u\) (incompressibility residual; coarse grids inflate it).
+- **spectral_slope** — log–log slope of the kinetic-energy spectrum.
+- **time_to_steady** — fraction of the run until order plateaus.
+
+**ANOVA / inference**
+- **F** — between-group variance ÷ within-group variance (\(\mathrm{MSB}/\mathrm{MSW}\)). Large F ⇒ group means differ relative to noise.
+- **p-value** — probability of seeing an F this large (or larger) if all group means were equal.
+- **SSB / SSW (SSE)** — sum of squares between groups / within groups (error).
+- **η² (eta squared)** — fraction of total variance explained by the factor (effect size).
+- **ω² (omega squared)** — less biased effect-size cousin of η².
+- **Tukey HSD** — which pairs of levels differ after ANOVA.
+- **Levene / Shapiro** — checks equal variances and roughly normal residuals.
+- **MAD / z-score / IQR anomalies** — trajectories unusual *within* their (α, ζ) cell.
+            """
+        )
+
+
 # ---------------------------------------------------------------------------
 # Tab 1 — teaching sandbox
 # ---------------------------------------------------------------------------
@@ -528,22 +605,70 @@ def tab_teaching() -> None:
 
     st.markdown("### Interactive ANOVA sandbox")
     st.markdown(
-        "Change the **difference between group means** and the **dispersion within groups**, "
-        "and watch how **F**, **p**, **SSE (SSW)**, and **η²** respond. "
-        r"$F = \mathrm{MSB}/\mathrm{MSW}$ (variation between groups / variation within groups)."
+        "Change how far group means sit apart and how noisy each group is, "
+        "then watch **F**, **p**, **SSE (SSW)**, and **η²** update. "
+        r"Recall $F = \mathrm{MSB}/\mathrm{MSW}$ "
+        "(variation between groups / variation within groups)."
     )
 
-    c1, c2, c3, c4 = st.columns(4)
+    st.markdown('<div class="lab-controls">', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4, gap="medium")
     with c1:
-        n_groups = st.slider("Number of groups", 2, 6, 3)
+        ctrl_label("Number of groups")
+        n_groups = st.slider(
+            "Number of groups",
+            2,
+            6,
+            3,
+            label_visibility="collapsed",
+            help="How many populations to compare.",
+        )
     with c2:
-        n_per = st.slider("n per group", 5, 80, 20)
+        ctrl_label("n per group")
+        n_per = st.slider(
+            "n per group",
+            5,
+            80,
+            20,
+            label_visibility="collapsed",
+            help="Sample size within each group.",
+        )
     with c3:
-        mean_diff = st.slider("Difference between means", 0.0, 5.0, 1.0, 0.05)
+        ctrl_label("Mean difference")
+        mean_diff = st.slider(
+            "Difference between means",
+            0.0,
+            5.0,
+            1.0,
+            0.05,
+            label_visibility="collapsed",
+            help="Spacing between adjacent group means (effect size knob).",
+        )
     with c4:
-        within_sd = st.slider("Dispersion within groups (SD)", 0.1, 5.0, 1.0, 0.05)
+        ctrl_label("Within-group SD")
+        within_sd = st.slider(
+            "Dispersion within groups (SD)",
+            0.1,
+            5.0,
+            1.0,
+            0.05,
+            label_visibility="collapsed",
+            help="Noise inside each group. Larger SD shrinks F and raises p.",
+        )
 
-    seed = st.number_input("Random seed", min_value=0, value=0, step=1)
+    s1, _, _ = st.columns([1, 1, 2], gap="medium")
+    with s1:
+        ctrl_label("Random seed")
+        seed = st.number_input(
+            "Random seed",
+            min_value=0,
+            value=0,
+            step=1,
+            label_visibility="collapsed",
+            help="Fixes the random draws so the same knobs give the same sample.",
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
     result = simulate_anova_groups(
         n_groups=n_groups,
         n_per_group=n_per,
@@ -560,6 +685,11 @@ def tab_teaching() -> None:
     m3.metric("SSE (SSW)", f"{result.ss_within:.3f}")
     m4.metric("η² (eta squared)", f"{result.eta_sq:.3f}")
     m5.metric("ω² (omega squared)", f"{result.omega_sq:.3f}")
+    fig_note(
+        "Readouts: **F** and **p** say whether group means differ relative to noise; "
+        "**SSE (SSW)** is leftover within-group scatter; **η² / ω²** measure how large "
+        "that difference is (effect size), not only whether it is “significant.”"
+    )
 
     rows = []
     for label, g in zip(result.labels, result.groups):
@@ -577,10 +707,19 @@ def tab_teaching() -> None:
     )
     fig.update_layout(showlegend=False)
     st.plotly_chart(apply_plotly_theme(fig, height=400), use_container_width=True)
+    fig_note(
+        "Box plot of the synthetic sample: boxes show the middle 50% of each group; "
+        "dots are individual draws. Wider overlap between boxes usually means weaker "
+        "evidence for a mean difference (lower F, higher p)."
+    )
 
     st.plotly_chart(
         variance_decomposition_fig(result.ss_between, result.ss_within),
         use_container_width=True,
+    )
+    fig_note(
+        "Variance decomposition: **SSB** is how much group means differ from the grand mean; "
+        "**SSW** is scatter around each group mean. ANOVA compares these two piles of variance."
     )
 
     with st.expander("ANOVA table details"):
@@ -614,6 +753,12 @@ def tab_teaching() -> None:
                 ]
             )
         )
+        fig_note(
+            "Classic ANOVA table: **SS** = sum of squares, **df** = degrees of freedom, "
+            "**MS = SS/df**, and **F = MS_between / MS_within**."
+        )
+
+    glossary_block()
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +773,11 @@ def tab_realdata(df: pd.DataFrame) -> None:
     )
 
     st.markdown("### ANOVA on active_matter features")
+    st.markdown(
+        "Apply the same ANOVA ideas to **real** The Well trajectories. "
+        "Pick a response feature and a factor (`zeta` or `alpha`), or run the full "
+        "two-way model with interaction."
+    )
     if df.get("synthetic", pd.Series([False])).fillna(False).any():
         st.info(
             "Currently using a **synthetic / demo** feature table that mirrors the "
@@ -654,6 +804,10 @@ def tab_realdata(df: pd.DataFrame) -> None:
         m2.metric("p-value", f"{res['p']:.4g}")
         m3.metric("SSE (SSW)", f"{res['ss_within']:.4g}")
         m4.metric("η²", f"{res['eta_sq']:.3f}")
+        fig_note(
+            f"One-way ANOVA of **{response}** across levels of **{factor}**. "
+            "Large η² means this factor explains much of the feature’s variance."
+        )
 
         fig = px.box(
             df,
@@ -667,9 +821,16 @@ def tab_realdata(df: pd.DataFrame) -> None:
         )
         fig.update_layout(showlegend=False)
         st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+        fig_note(
+            f"Distribution of **{response}** at each **{factor}** level. "
+            "Separated boxes support a factor effect; heavy overlap does not."
+        )
         st.plotly_chart(
             variance_decomposition_fig(res["ss_between"], res["ss_within"]),
             use_container_width=True,
+        )
+        fig_note(
+            "Same SSB vs SSW split as in the sandbox, now computed on the feature table."
         )
 
         st.markdown("#### Assumption checks")
@@ -682,14 +843,26 @@ def tab_realdata(df: pd.DataFrame) -> None:
             + ("yes" if assumptions["recommend_nonparametric"] else "no")
             + "**"
         )
+        fig_note(
+            "Levene tests similar within-group variances; Shapiro checks residual normality. "
+            "If either fails badly, prefer Kruskal–Wallis / robust methods (see notebook)."
+        )
 
         st.markdown("#### Tukey HSD post-hoc")
         st.dataframe(res["tukey"], use_container_width=True)
+        fig_note(
+            "Tukey HSD lists pairwise level comparisons. "
+            "**reject = True** means that pair’s means differ after multiple-comparison control."
+        )
 
     elif analysis == "Two-way ANOVA (alpha × zeta)":
         res = two_way_anova(df, response, "alpha", "zeta")
         verdict_banner(res["verdict"], res["verdict_level"])
         st.dataframe(res["table"], use_container_width=True)
+        fig_note(
+            "Two-way ANOVA table: main effects of **α** and **ζ**, plus their **interaction**. "
+            "Partial η² shows which term explains the most unique variance in the response."
+        )
         fig = px.box(
             df,
             x=df["zeta"].astype(str),
@@ -700,6 +873,10 @@ def tab_realdata(df: pd.DataFrame) -> None:
             color_discrete_sequence=PLOTLY_COLORS,
         )
         st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+        fig_note(
+            f"**{response}** vs **ζ**, colored by **α**. "
+            "If curves/boxes for different α diverge as ζ changes, that visualizes an interaction."
+        )
         with st.expander("Model summary"):
             st.text(res["model_summary"])
 
@@ -709,6 +886,10 @@ def tab_realdata(df: pd.DataFrame) -> None:
         verdict_banner(res["verdict"], res["verdict_level"])
         st.markdown("#### Pairwise Welch t-tests (Holm-adjusted)")
         st.dataframe(tt, use_container_width=True)
+        fig_note(
+            "Each row compares two levels of the factor (Welch t-test). "
+            "**p_corr** is Holm-adjusted; use it instead of raw p for many pairs."
+        )
         fig = px.strip(
             df,
             x=df[factor].astype(str),
@@ -719,6 +900,11 @@ def tab_realdata(df: pd.DataFrame) -> None:
         )
         fig.update_layout(showlegend=False)
         st.plotly_chart(apply_plotly_theme(fig, height=420), use_container_width=True)
+        fig_note(
+            "Strip plot of every trajectory. Useful for spotting outliers that a box plot might hide."
+        )
+
+    glossary_block()
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +914,11 @@ def tab_physics(df: pd.DataFrame) -> None:
     from src.stats import detect_anomalies, physics_validation
 
     st.markdown("### Physics validation & anomalies")
+    st.markdown(
+        "Sanity-check the feature table against expected physics "
+        "(concentration near 1, order rising with alignment), "
+        "then flag trajectories that look atypical inside their (α, ζ) cell."
+    )
 
     phys = physics_validation(df)
     for key in ("concentration", "incompressibility", "phase_transition"):
@@ -754,6 +945,10 @@ def tab_physics(df: pd.DataFrame) -> None:
             """,
             unsafe_allow_html=True,
         )
+    fig_note(
+        "Pass/fail cards summarize conservation, discrete divergence, and the "
+        "Spearman correlation between nematic order and ζ."
+    )
 
     st.markdown("#### Phase transition: nematic order vs alignment (ζ)")
     fig = px.scatter(
@@ -782,6 +977,10 @@ def tab_physics(df: pd.DataFrame) -> None:
             )
         )
     st.plotly_chart(apply_plotly_theme(fig, height=440), use_container_width=True)
+    fig_note(
+        "Each point is a trajectory. Lines are mean **S** vs **ζ** at fixed **α**. "
+        "A rising trend is the isotropic→nematic-like signature in this ensemble."
+    )
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -796,6 +995,10 @@ def tab_physics(df: pd.DataFrame) -> None:
     )
     n_flag = int(flagged["is_anomaly"].sum())
     st.metric("Flagged anomalies", f"{n_flag} / {len(flagged)}")
+    fig_note(
+        "Anomalies are scored **within** each (α, ζ) cell, so a high-ζ ordered run is not "
+        "flagged merely for having large S overall."
+    )
 
     fig_a = px.scatter(
         flagged,
@@ -807,6 +1010,9 @@ def tab_physics(df: pd.DataFrame) -> None:
         color_discrete_map={"anomaly": PALETTE["fail"], "ok": PALETTE["olive"]},
     )
     st.plotly_chart(apply_plotly_theme(fig_a, height=420), use_container_width=True)
+    fig_note(
+        "Red points exceed the robust threshold for the chosen method (MAD / z-score / IQR)."
+    )
 
     st.markdown("#### Anomaly table")
     show_cols = [
@@ -823,6 +1029,9 @@ def tab_physics(df: pd.DataFrame) -> None:
         show_cols.append("injected_anomaly")
     show = flagged.loc[flagged["is_anomaly"], show_cols]
     st.dataframe(show, use_container_width=True)
+    fig_note(
+        "Tabular list of flagged trajectories with their anomaly score for auditing or exclusion."
+    )
 
     g1, g2 = st.columns(2)
     with g1:
@@ -836,6 +1045,9 @@ def tab_physics(df: pd.DataFrame) -> None:
         )
         fig_c.add_vline(x=1.0, line_dash="dash", line_color=PALETTE["fail"])
         st.plotly_chart(apply_plotly_theme(fig_c, height=360), use_container_width=True)
+        fig_note(
+            "Histogram of mean concentration. The dashed line marks the physical target **c = 1**."
+        )
     with g2:
         st.markdown("#### Incompressibility residual")
         fig_d = px.histogram(
@@ -846,6 +1058,12 @@ def tab_physics(df: pd.DataFrame) -> None:
             color_discrete_sequence=[PALETTE["ochre"]],
         )
         st.plotly_chart(apply_plotly_theme(fig_d, height=360), use_container_width=True)
+        fig_note(
+            "Distribution of discrete divergence RMS. Values can look large on a coarse "
+            "analysis grid even when the underlying Stokes flow is nearly incompressible."
+        )
+
+    glossary_block()
 
 
 def main() -> None:

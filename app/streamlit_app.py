@@ -32,7 +32,6 @@ from src.stats import (  # noqa: E402
 )
 
 FEATURES_PATH = ROOT / "data" / "features.parquet"
-LIVE_DEMO_URL = "https://physcientific.onrender.com/"
 RESPONSE_OPTIONS = [
     "nematic_order_S",
     "nematic_order_S_final",
@@ -183,6 +182,35 @@ h1 {{
     text-underline-offset: 0.12em;
 }}
 
+.lab-dataset {{
+    background: var(--paper-deep);
+    border: 1px solid var(--grid);
+    border-left: 3px solid var(--graphite);
+    padding: 0.7rem 1rem;
+    margin: 0 0 1.05rem 0;
+    max-width: 52rem;
+}}
+.lab-dataset-label {{
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    margin-bottom: 0.35rem;
+}}
+.lab-dataset p {{
+    font-family: "Source Sans 3", "Segoe UI", sans-serif;
+    font-size: 0.92rem;
+    color: var(--ink);
+    line-height: 1.5;
+    margin: 0;
+}}
+.lab-dataset code {{
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.85em;
+    color: var(--olive);
+}}
+
 .lab-findings {{
     background: var(--paper-deep);
     border: 1px solid var(--ink);
@@ -204,6 +232,26 @@ h1 {{
     color: var(--ink);
     line-height: 1.45;
     margin: 0;
+}}
+
+.lab-footer {{
+    margin-top: 2.4rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--ink);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--graphite);
+    letter-spacing: 0.02em;
+    line-height: 1.55;
+}}
+.lab-footer b {{
+    color: var(--ink);
+    font-weight: 600;
+}}
+.lab-footer a {{
+    color: var(--olive);
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
 }}
 
 /* Tabs — ruled notebook feel */
@@ -353,9 +401,11 @@ def data_provenance(df: pd.DataFrame) -> dict:
     }
 
 
+AUTHOR = "Emilio Gordillo Esparragoza"
+
+
 def lab_header(df: pd.DataFrame) -> None:
     meta = data_provenance(df)
-    source = "synthetic demo" if meta["synthetic"] else "The Well · active_matter (real)"
     findings_html = ""
     if not meta["synthetic"]:
         findings_html = f"""
@@ -375,8 +425,7 @@ def lab_header(df: pd.DataFrame) -> None:
     st.html(
         f"""
         <div class="lab-kicker">
-          Statistical laboratory · PolymathicAI The Well ·
-          <a href="{LIVE_DEMO_URL}" target="_blank" rel="noopener noreferrer">Live demo</a>
+          Statistical laboratory
         </div>
         <h1 class="lab-brand">active_matter · circumstance &amp; response</h1>
         <p class="lab-lede">
@@ -384,14 +433,36 @@ def lab_header(df: pd.DataFrame) -> None:
           with ANOVA evidence, physics-law checks, and within-cell anomaly flags.
         </p>
         <div class="lab-meta">
-          <span>live demo <a href="{LIVE_DEMO_URL}" target="_blank" rel="noopener noreferrer">{LIVE_DEMO_URL.rstrip("/")}</a></span>
-          <span>source <b>{source}</b></span>
           <span>trajectories <b>{meta["n_rows"]}</b></span>
           <span>α levels <b>{meta["n_alpha"]}</b></span>
           <span>ζ levels <b>{meta["n_zeta"]}</b></span>
           <span>factorial cells <b>{meta["n_cells"]}</b></span>
         </div>
+        <div class="lab-dataset">
+          <div class="lab-dataset-label">What is the active_matter dataset?</div>
+          <p>
+            <code>active_matter</code> (from PolymathicAI <b>The Well</b>) is a continuum
+            simulation ensemble of <b>rod-like active particles</b> in a <b>Stokes fluid</b>.
+            Each run is controlled by two initial factors: dipole strength
+            <code>α</code> (alpha) and alignment strength <code>ζ</code> (zeta).
+            From each trajectory we extract scalar responses — nematic order
+            <code>S</code>, kinetic energy, enstrophy, concentration, divergence residual —
+            then ask how α and ζ shape those outcomes via ANOVA, physics checks, and
+            within-cell anomaly screens.
+          </p>
+        </div>
         {findings_html}
+        """
+    )
+
+
+def lab_footer() -> None:
+    st.html(
+        f"""
+        <div class="lab-footer">
+          Author · <b>{AUTHOR}</b><br/>
+          Dataset · PolymathicAI · The Well · active_matter
+        </div>
         """
     )
 
@@ -759,7 +830,7 @@ def tab_physics(df: pd.DataFrame) -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="active_matter · statistical lab",
+        page_title="active_matter · statistical laboratory",
         page_icon="∫",
         layout="wide",
         initial_sidebar_state="collapsed",
@@ -777,6 +848,8 @@ def main() -> None:
         tab_realdata(df)
     with tab3:
         tab_physics(df)
+
+    lab_footer()
 
 
 if __name__ == "__main__":

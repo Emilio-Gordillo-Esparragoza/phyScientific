@@ -1,6 +1,6 @@
 # Mathematical resources
 
-This folder documents **every mathematical tool** used in phyScientific: what it is, **why** it appears in a given lab, its assumptions, and primary sources.
+This folder documents **every mathematical tool** used in LectureLab: what it is, **why** it appears in a given lab, its assumptions, and primary sources.
 
 | Lab | Mode | Math index |
 |-----|------|------------|

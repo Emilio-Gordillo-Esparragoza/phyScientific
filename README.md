@@ -13,10 +13,12 @@ Supported ensembles (sidebar picker):
 
 ANOVA panels appear **only** for `active_matter`. Gray–Scott and acoustic use exploratory phase-diagram and multiparameter views instead. `planetary_motion` is a geometric / celestial lab (Feynman’s Lost Lecture).
 
-**Live demo:** [https://physcientific.onrender.com/](https://physcientific.onrender.com/)  
+**Live demo:** [https://lecturelab.onrender.com/](https://lecturelab.onrender.com/)  
 *(Render free tier may cold-start for ~30–60s after idle.)*
 
-Repository: [Emilio-Gordillo-Esparragoza/phyScientific](https://github.com/Emilio-Gordillo-Esparragoza/phyScientific)
+Repository: [Emilio-Gordillo-Esparragoza/LectureLab](https://github.com/Emilio-Gordillo-Esparragoza/LectureLab)
+
+**License:** [Apache License 2.0](LICENSE) — free to use, modify, and redistribute for education and research; contributions welcome under the same terms.
 
 ## What this project does
 
@@ -86,7 +88,7 @@ All headline numbers refer to the stride-reduced feature table used for statisti
 ## Project layout
 
 ```
-phyScientific/
+LectureLab/
 ├── app/streamlit_app.py      # Dashboard (sidebar + panels per analysis_mode)
 ├── data/
 │   ├── features.parquet                 # active_matter (legacy path)
@@ -214,11 +216,13 @@ The public demo is a **Render** Web Service (Streamlit needs a long-running proc
 
 ### One-click from Blueprint
 
-1. Push this repo to GitHub (already: `Emilio-Gordillo-Esparragoza/phyScientific`).
+1. Push this repo to GitHub (already: `Emilio-Gordillo-Esparragoza/LectureLab`).
 2. Open [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
-3. Connect the `phyScientific` repository.
+3. Connect the `LectureLab` repository.
 4. Render reads [`render.yaml`](render.yaml): builds with `requirements-app.txt`, starts Streamlit on `$PORT`.
-5. After the first deploy, the service URL is typically `https://physcientific.onrender.com` (confirm in the Render UI).
+5. After the first deploy, the service URL is typically `https://lecturelab.onrender.com` (confirm in the Render UI).
+
+To replace an older `physcientific` service: delete it in the Render dashboard (or CLI), then create a new Web Service / Blueprint named `lecturelab` from this repo so the public URL becomes `https://lecturelab.onrender.com`.
 
 ### Manual Web Service
 

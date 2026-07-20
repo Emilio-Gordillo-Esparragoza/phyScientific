@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: physcientific
+    name: lecturelab
     runtime: python
     plan: free
     region: oregon

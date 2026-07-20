@@ -560,7 +560,7 @@ def data_provenance(df: pd.DataFrame, spec: DatasetSpec) -> dict:
 
 
 AUTHOR = "Emilio Gordillo Esparragoza"
-REPO_URL = "https://github.com/Emilio-Gordillo-Esparragoza/phyScientific"
+REPO_URL = "https://github.com/Emilio-Gordillo-Esparragoza/LectureLab"
 
 
 def render_dataset_sidebar() -> DatasetSpec:
@@ -1986,6 +1986,47 @@ def tab_orbit_elementary(spec: DatasetSpec) -> None:
         "nearly equal lengths force a circular hodograph."
     )
 
+    with st.expander("1 · Setup — the physical system", expanded=True):
+        st.markdown(
+            "The Sun sits at a **focus**. Radial lines to the planet carve **triangles** "
+            "whose areas encode Kepler’s second law. Kepler’s first law claims the path "
+            "is an ellipse — that is what we prove."
+        )
+    with st.expander("2 · Introducing the velocity diagram"):
+        st.markdown(
+            "Translate every velocity vector so it starts at a common origin $O$. "
+            "The tip $p$ of $\\mathbf{v}$ traces a path in **velocity space**. "
+            "Because gravity is a **central** force, $\\Delta\\mathbf{v}$ is always "
+            "radial (toward the Sun). For the inverse-square law the tips form a "
+            "**perfect circle**."
+        )
+    with st.expander("3 · Triangles, equal areas, and equal |Δv|", expanded=True):
+        st.markdown(
+            r"""
+- **Newton:** $F = -GMm/r^{2}\,\hat{\mathbf{r}}$ so $|\Delta v|\propto \Delta t / r^{2}$.
+- **Kepler II:** equal areas in equal times $\Leftrightarrow$ $h = r\,v_{\perp}$ constant.
+  The shaded **equal-area triangles** on the left are the video’s “pie slices” of equal
+  areal sweep; their angular widths $\Delta\theta$ shrink as $r$ grows.
+- **Feynman’s clock:** over **equal angles**, $\Delta t \propto r^{2}$, cancelling the
+  $1/r^{2}$ in $|\Delta v|$. The red **equal chords** on the hodograph are those
+  $|\Delta v|$ steps — equal chord lengths around a path force a **circle**.
+            """
+        )
+    with st.expander("4 · The eccentric point and 90° rotation"):
+        st.markdown(
+            "The velocity origin $O$ is **offset** from the circle’s center $C$ "
+            "(the eccentric point). Rotating the diagram by $90^{\\circ}$ aligns "
+            "velocity-parallel lines with the geometry of the position-space orbit. "
+            "The perpendicular bisector of $Op$ meeting the ray $Cp$ maps onto the "
+            "planet’s location."
+        )
+    with st.expander("5 · Finale — the locus is an ellipse"):
+        st.markdown(
+            "As $p$ runs around the velocity circle, the constructed points satisfy "
+            "$|PF_1| + |PF_2| = 2a$ — the gardener’s definition of an ellipse with "
+            "foci $F_1$ (the Sun) and $F_2$. Therefore the orbit **must** be an ellipse."
+        )
+
     st.markdown("#### How the triangular areas fit Kepler’s second law")
     st.markdown(
         r"""
@@ -2048,47 +2089,6 @@ Following the lecture video:
         show_ang["dv_mag"] = show_ang["dv_mag"].round(4)
         st.dataframe(show_ang, use_container_width=True, hide_index=True)
         st.caption("`dv_mag` stays flat — equal angles ⇒ equal |Δv| ⇒ circular hodograph.")
-
-    with st.expander("1 · Setup — the physical system", expanded=True):
-        st.markdown(
-            "The Sun sits at a **focus**. Radial lines to the planet carve **triangles** "
-            "whose areas encode Kepler’s second law. Kepler’s first law claims the path "
-            "is an ellipse — that is what we prove."
-        )
-    with st.expander("2 · Introducing the velocity diagram"):
-        st.markdown(
-            "Translate every velocity vector so it starts at a common origin $O$. "
-            "The tip $p$ of $\\mathbf{v}$ traces a path in **velocity space**. "
-            "Because gravity is a **central** force, $\\Delta\\mathbf{v}$ is always "
-            "radial (toward the Sun). For the inverse-square law the tips form a "
-            "**perfect circle**."
-        )
-    with st.expander("3 · Triangles, equal areas, and equal |Δv|", expanded=True):
-        st.markdown(
-            r"""
-- **Newton:** $F = -GMm/r^{2}\,\hat{\mathbf{r}}$ so $|\Delta v|\propto \Delta t / r^{2}$.
-- **Kepler II:** equal areas in equal times $\Leftrightarrow$ $h = r\,v_{\perp}$ constant.
-  The shaded **equal-area triangles** on the left are the video’s “pie slices” of equal
-  areal sweep; their angular widths $\Delta\theta$ shrink as $r$ grows.
-- **Feynman’s clock:** over **equal angles**, $\Delta t \propto r^{2}$, cancelling the
-  $1/r^{2}$ in $|\Delta v|$. The red **equal chords** on the hodograph are those
-  $|\Delta v|$ steps — equal chord lengths around a path force a **circle**.
-            """
-        )
-    with st.expander("4 · The eccentric point and 90° rotation"):
-        st.markdown(
-            "The velocity origin $O$ is **offset** from the circle’s center $C$ "
-            "(the eccentric point). Rotating the diagram by $90^{\\circ}$ aligns "
-            "velocity-parallel lines with the geometry of the position-space orbit. "
-            "The perpendicular bisector of $Op$ meeting the ray $Cp$ maps onto the "
-            "planet’s location."
-        )
-    with st.expander("5 · Finale — the locus is an ellipse"):
-        st.markdown(
-            "As $p$ runs around the velocity circle, the constructed points satisfy "
-            "$|PF_1| + |PF_2| = 2a$ — the gardener’s definition of an ellipse with "
-            "foci $F_1$ (the Sun) and $F_2$. Therefore the orbit **must** be an ellipse."
-        )
 
 
 def tab_orbit_formal(spec: DatasetSpec) -> None:

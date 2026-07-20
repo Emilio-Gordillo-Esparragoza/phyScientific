@@ -1,7 +1,7 @@
 # Runtime-only deps for the Streamlit dashboard (Render / production).
 # Do NOT install torch / the_well here — those are for local feature extraction.
 # matplotlib / seaborn / scikit-learn are notebook-only (see requirements.txt).
-streamlit>=1.29.0
+streamlit>=1.59.2
 plotly>=5.18.0
 pandas>=2.1.0
 numpy>=1.26.0

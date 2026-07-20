@@ -13,12 +13,12 @@ Supported ensembles (sidebar picker):
 
 ANOVA panels appear **only** for `active_matter`. Gray–Scott and acoustic use exploratory phase-diagram and multiparameter views instead. `planetary_motion` is a geometric / celestial lab (Feynman’s Lost Lecture).
 
-**Live demo:** [https://lecturelab.onrender.com/](https://lecturelab.onrender.com/)  
-*(Render free tier may cold-start for ~30–60s after idle.)*
+**Live demo:** [https://lecturelab-wisn.onrender.com/](https://lecturelab-wisn.onrender.com/)  
+*(Render free tier may cold-start for ~30–60s after idle. Exact `lecturelab.onrender.com` was unavailable; Render assigned this unique subdomain.)*
 
 Repository: [Emilio-Gordillo-Esparragoza/LectureLab](https://github.com/Emilio-Gordillo-Esparragoza/LectureLab)
 
-**License:** [Apache License 2.0](LICENSE) — free to use, modify, and redistribute for education and research; contributions welcome under the same terms.
+**License:** [Apache License 2.0](LICENSE) — free to use, modify, and redistribute for education and research; contributions welcome under the same terms. See also [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## What this project does
 
@@ -220,9 +220,9 @@ The public demo is a **Render** Web Service (Streamlit needs a long-running proc
 2. Open [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
 3. Connect the `LectureLab` repository.
 4. Render reads [`render.yaml`](render.yaml): builds with `requirements-app.txt`, starts Streamlit on `$PORT`.
-5. After the first deploy, the service URL is typically `https://lecturelab.onrender.com` (confirm in the Render UI).
+5. After the first deploy, the service URL is typically `https://lecturelab-wisn.onrender.com` (Render may append a short suffix if the bare name is taken).
 
-To replace an older `physcientific` service: delete it in the Render dashboard (or CLI), then create a new Web Service / Blueprint named `lecturelab` from this repo so the public URL becomes `https://lecturelab.onrender.com`.
+To replace an older `physcientific` service: delete it in the Render dashboard (or CLI), then create a new Web Service / Blueprint named `lecturelab` from this repo.
 
 ### Manual Web Service
 
